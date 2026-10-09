@@ -4,6 +4,8 @@ var assert = require("assert");
 var Rng = require("../js/rng.js");
 var Const = require("../js/const.js");
 var World = require("../js/world.js");
+// sim.js calls into economy at reset/step, so it must be loaded first
+require("../js/economy.js");
 var Sim = require("../js/sim.js");
 var Render = require("../js/render.js");
 
@@ -144,10 +146,33 @@ function testCameraFollowsAcrossSeam() {
 	}
 }
 
+function testHitNodeFindsNearestNode() {
+	var sim = Sim.create(2468);
+	var world = sim.world;
+	var view = {
+		cameraX: world.x[0],
+		pxPerKm: 50,
+		width: 1200,
+		trackY: 400
+	};
+	var i;
+	var sx;
+
+	// every node is hit at its own screen column, inside the vertical band
+	for (i = 0; i < world.nodeCount; i += 1) {
+		sx = Render.screenX(world.x[i], view.cameraX, view.pxPerKm, view.width, Const.RING_KM);
+		assert.strictEqual(Render.hitNode(view, sim, sx, view.trackY - 30), i, "node " + i + " is hit at its own column");
+	}
+	// above the band, and far off the track, nothing is hit
+	assert.strictEqual(Render.hitNode(view, sim, 600, view.trackY - 80), -1);
+	assert.strictEqual(Render.hitNode(view, sim, -5000, view.trackY), -1);
+}
+
 testSpacingAcrossSeeds();
 testGenerationIsDeterministic();
 testWorldShape();
 testTrainCrossesSeamWithoutJump();
 testEveryPositionHasACameraNearCopy();
 testCameraFollowsAcrossSeam();
-console.log("World checks passed: 100-seed spacing, determinism, world shape, seam-continuous train and camera.");
+testHitNodeFindsNearestNode();
+console.log("World checks passed: 100-seed spacing, determinism, world shape, seam-continuous train and camera, node hit test.");

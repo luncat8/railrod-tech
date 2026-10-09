@@ -27,6 +27,7 @@
 		sim.steps = 0;
 		sim.time = 0;
 		sim.world = RR.World.generate(sim.rng);
+		RR.Economy.refreshPrices(sim.world);
 		sim.train.x = sim.world.x[0];
 		sim.train.v = RR.Const.TRAIN_V;
 	};
@@ -34,6 +35,7 @@
 	Sim.step = function (sim, dt) {
 		sim.steps += 1;
 		sim.time = sim.steps * dt;
+		RR.Economy.tick(sim.world, dt);
 		// placeholder kinematics: constant visual speed, wraps at the seam
 		sim.train.x = RR.World.wrap(sim.train.x + sim.train.v * dt);
 	};

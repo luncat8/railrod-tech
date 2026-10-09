@@ -14,6 +14,13 @@
 	var CON_CAP = "#7f9fc4";
 	var TRAIN_BODY = "#a9d68e";
 	var TRAIN_DIM = "rgba(169, 214, 142, 0.35)";
+	var TICK = "#e8eee6";
+
+	var BAR_W = 4;
+	var BAR_STEP = 5;
+	var BAR_H = 22;
+	var BAR_BASE = 27;
+	var HIT_HALF = 20;
 
 	Render.create = function (canvas) {
 		return {
@@ -61,13 +68,37 @@
 		return cameraX + delta * follow;
 	};
 
+	// nearest node whose screen column is within HIT_HALF of px, inside the node band
+	Render.hitNode = function (view, sim, px, py) {
+		var world = sim.world;
+		var top = view.trackY - BAR_BASE - BAR_H - 3;
+		var bottom = view.trackY + 4;
+		var best = -1;
+		var bestDist = HIT_HALF;
+		var i;
+		var sx;
+		var d;
+
+		if (py < top || py > bottom) return -1;
+
+		for (i = 0; i < world.nodeCount; i += 1) {
+			sx = Render.screenX(world.x[i], view.cameraX, view.pxPerKm, view.width, C.RING_KM);
+			d = Math.abs(px - sx);
+			if (d <= bestDist) {
+				bestDist = d;
+				best = i;
+			}
+		}
+		return best;
+	};
+
 	Render.snapCamera = function (view, sim) {
 		view.cameraX = sim.train.x;
 		view.lastSimTime = sim.time;
 	};
 
 	function updateCamera(view, sim, frameDt) {
-		if (view.lastSimTime === null || sim.time < view.lastSimTime) {
+		if (view.lastSimTime === null) {
 			Render.snapCamera(view, sim);
 			return;
 		}
@@ -98,7 +129,7 @@
 		var context = view.context;
 		var sx = Render.screenX(world.x[i], view.cameraX, view.pxPerKm, view.width, C.RING_KM);
 
-		if (sx < -30 || sx > view.width + 30) return;
+		if (sx < -40 || sx > view.width + 40) return;
 
 		context.fillStyle = NODE_BODY;
 		context.fillRect(sx - 8, view.trackY - 20, 16, 20);
@@ -106,6 +137,35 @@
 		context.fillRect(sx - 8, view.trackY - 26, 16, 6);
 		context.fillStyle = TIE;
 		context.fillRect(sx - 16, view.trackY - 2, 32, 2);
+		drawYardBars(view, world, i, sx);
+	}
+
+	// three yard bars above the node, one per resource, each with a price tick
+	function drawYardBars(view, world, i, sx) {
+		var context = view.context;
+		var bottom = view.trackY - BAR_BASE;
+		var res = C.RES_N;
+		var r;
+		var idx;
+		var fill;
+		var frac;
+		var barX;
+
+		for (r = 0; r < res; r += 1) {
+			idx = i * res + r;
+			barX = sx - 7 + r * BAR_STEP;
+			fill = world.stock[idx] / world.cap[idx];
+			if (fill < 0) fill = 0;
+			else if (fill > 1) fill = 1;
+			context.fillStyle = C.RES_COLORS[r];
+			context.fillRect(barX, bottom - fill * BAR_H, BAR_W, fill * BAR_H);
+
+			frac = world.price[idx] / (world.base[idx] * (1 + C.SPREAD));
+			if (frac < 0) frac = 0;
+			else if (frac > 1) frac = 1;
+			context.fillStyle = TICK;
+			context.fillRect(barX - 1, bottom - frac * BAR_H - 0.5, BAR_W + 2, 1);
+		}
 	}
 
 	function drawTrain(view, sim, paused) {

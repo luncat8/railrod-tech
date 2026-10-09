@@ -18,6 +18,21 @@
 		RR.Render.resize(view);
 	}
 
+	function onMouseMove(event) {
+		var rect = view.canvas.getBoundingClientRect();
+		var i = RR.Render.hitNode(view, sim, event.clientX - rect.left, event.clientY - rect.top);
+
+		if (i < 0) {
+			RR.UI.hideNodeLabel();
+			return;
+		}
+		RR.UI.showNodeLabel(sim.world, i, event.clientX, event.clientY);
+	}
+
+	function onMouseLeave() {
+		RR.UI.hideNodeLabel();
+	}
+
 	function frame(timestamp) {
 		var elapsed = 0;
 		var fpsInterval = timestamp - fpsWindowTimestamp;
@@ -53,6 +68,8 @@
 		view = RR.Render.create(document.getElementById("c"));
 		RR.UI.bind(Main, sim.seed, speed);
 		root.addEventListener("resize", onResize);
+		view.canvas.addEventListener("mousemove", onMouseMove);
+		view.canvas.addEventListener("mouseleave", onMouseLeave);
 		onResize();
 		RR.Render.draw(view, sim, paused, 0);
 		root.requestAnimationFrame(frame);
@@ -62,6 +79,7 @@
 		if (!sim) return;
 		RR.Sim.reset(sim, seed);
 		RR.Clock.reset(clock);
+		RR.Render.snapCamera(view, sim);
 		RR.UI.setSeed(sim.seed);
 		RR.UI.updateTelemetry(measuredFps, sim, clock);
 	};

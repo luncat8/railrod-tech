@@ -15,10 +15,34 @@
 	var stepsValue = null;
 	var droppedValue = null;
 	var runtimeStatus = null;
+	var nodeLabel = null;
 	var displayedFps = null;
 	var displayedTime = null;
 	var displayedSteps = null;
 	var displayedDropped = null;
+
+	var RES_NAMES = ["R1", "R2", "R3"];
+
+	function emittedIndex(world, i) {
+		var res = RR.Const.RES_N;
+		var r;
+
+		for (r = 0; r < res; r += 1) {
+			if (world.inflow[i * res + r] > 0) return r;
+		}
+		return -1;
+	}
+
+	function recipeNames(mask) {
+		var res = RR.Const.RES_N;
+		var names = [];
+		var r;
+
+		for (r = 0; r < res; r += 1) {
+			if (mask & (1 << r)) names.push(RES_NAMES[r]);
+		}
+		return names.join("+");
+	}
 
 	function onSeedChange() {
 		var value = Number(seedInput.value);
@@ -54,6 +78,7 @@
 		stepsValue = document.getElementById("steps-value");
 		droppedValue = document.getElementById("dropped-value");
 		runtimeStatus = document.getElementById("runtime-status").parentNode;
+		nodeLabel = document.getElementById("node-label");
 
 		seedInput.addEventListener("change", onSeedChange);
 		document.getElementById("new-seed").addEventListener("click", onNewSeed);
@@ -73,7 +98,6 @@
 		var label = Number(speed).toFixed(2) + "×";
 		if (!speedInput) return;
 		speedInput.value = String(speed);
-		speedValue.value = label;
 		speedValue.textContent = label;
 	};
 
@@ -107,6 +131,63 @@
 			droppedValue.textContent = nextDropped.toFixed(2);
 			displayedDropped = nextDropped;
 		}
+	};
+
+	// hover panel for one node; all formatting lives here, in the event path
+	UI.showNodeLabel = function (world, i, x, y) {
+		if (!nodeLabel) return;
+
+		var res = RR.Const.RES_N;
+		var isSrc = world.kind[i] === RR.World.SRC;
+		var sub;
+		var html = "";
+		var r;
+		var idx;
+		var buy;
+		var sell;
+		var w;
+		var h;
+		var left;
+		var top;
+
+		if (isSrc) {
+			r = emittedIndex(world, i);
+			sub = "EMITS " + RES_NAMES[r] + " · " + world.inflow[i * res + r].toFixed(2) + " UNITS/S";
+		} else {
+			sub = "NEEDS " + recipeNames(world.need[i]) + " · " + world.rate[i].toFixed(2) + " BASKETS/S";
+		}
+
+		html += '<div class="nl-head">' + (isSrc ? "SOURCE" : "CONSUMER") + " · NODE " + i + "</div>";
+		html += '<div class="nl-sub">' + sub + "</div>";
+		for (r = 0; r < res; r += 1) {
+			idx = i * res + r;
+			buy = world.stock[idx] >= 1 ? "B " + RR.Economy.buyQuote(world, i, r).toFixed(2) : "B —";
+			sell = world.stock[idx] < world.cap[idx] ? "S " + RR.Economy.sellQuote(world, i, r).toFixed(2) : "S —";
+			html += '<div class="nl-row">'
+				+ '<span class="nl-res" style="color:' + RR.Const.RES_COLORS[r] + '">' + RES_NAMES[r] + "</span>"
+				+ '<span class="nl-stock">' + Math.round(world.stock[idx]) + "/" + Math.round(world.cap[idx]) + "</span>"
+				+ '<span class="nl-quote">' + buy + "</span>"
+				+ '<span class="nl-quote">' + sell + "</span>"
+				+ "</div>";
+		}
+
+		nodeLabel.innerHTML = html;
+		nodeLabel.hidden = false;
+
+		w = nodeLabel.offsetWidth;
+		h = nodeLabel.offsetHeight;
+		left = x + 14;
+		top = y + 16;
+		if (left + w > root.innerWidth - 8) left = x - w - 14;
+		if (top + h > root.innerHeight - 8) top = y - h - 14;
+		if (left < 8) left = 8;
+		if (top < 8) top = 8;
+		nodeLabel.style.left = left + "px";
+		nodeLabel.style.top = top + "px";
+	};
+
+	UI.hideNodeLabel = function () {
+		if (nodeLabel) nodeLabel.hidden = true;
 	};
 
 	RR.UI = UI;

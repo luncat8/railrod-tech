@@ -39,6 +39,13 @@
 		K_MIN: 0.5,
 		K_MAX: 2,
 
+		// economy
+		PRICE_FLOOR: 0.2,
+		SPREAD: 0.08,
+
+		// resources: R1 amber, R2 slate-blue, R3 teal
+		RES_COLORS: ["#d9b978", "#7f9fc4", "#63c0ae"],
+
 		// placeholder train, replaced by the 0.1.3 force model
 		TRAIN_V: 1.5,
 

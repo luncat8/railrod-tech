@@ -4,3 +4,6 @@
 - To guarantee a minimum spacing on a ring without a rejection loop, place one node per equal slot plus jitter bounded by `slot - MIN_GAP`; adjacent slots (including the wrap pair) then stay >= MIN_GAP apart by construction.
 - For wrap-X rendering, keep the camera unwrapped and draw every object at the ring copy nearest the camera (`x + round((cameraX - x) / RING_KM) * RING_KM`). If the viewport shows less than one ring, the visible copy switches only off screen, so the seam never pops.
 - A camera that smooths toward a moving anchor must wrap its delta to the shortest arc (`delta -= RING_KM * round(delta / RING_KM)`), or it swings the long way around the ring when the anchor crosses x=0.
+- Cache per-node-resource prices in a typed array refreshed by the sim tick; the render loop then never evaluates `pow()` per frame, and experiments can assert on the same numbers the player sees.
+- The consumer stall gate reads `stock >= 1` before draining, so a fed consumer can drain an input to just under one unit and then stalls — the frozen bar sitting at ~1 unit is the visible "needs feeding" signal.
+- Hover labels are event-driven: keep all string formatting in the mousemove handler, never in the frame loop.

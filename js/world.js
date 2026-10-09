@@ -100,7 +100,10 @@
 			stock: new Float32Array(n * res),
 			cap: new Float32Array(n * res),
 			inflow: new Float32Array(n * res),
-			base: new Float32Array(n * res)
+			base: new Float32Array(n * res),
+			price: new Float32Array(n * res),
+			consumed: new Float32Array(n * res),
+			overflow: new Float32Array(n * res)
 		};
 		var i;
 

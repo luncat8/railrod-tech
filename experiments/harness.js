@@ -4,6 +4,8 @@ var assert = require("assert");
 var Rng = require("../js/rng.js");
 var Const = require("../js/const.js");
 var World = require("../js/world.js");
+// sim.js calls into economy at reset/step, so it must be loaded first
+require("../js/economy.js");
 var Sim = require("../js/sim.js");
 var Clock = require("../js/clock.js");
 
