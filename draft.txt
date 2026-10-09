@@ -63,3 +63,11 @@ i think this will simplify and make more aasy to concentrate development on more
 - player can reconfigure train and railroad, as draft say.
 
 note main goal of this game prototype is dynamic train upgrade/configuration and good system for it: to show that it is not worth to mount on train enormous engine and make 4m gauge, but there is some realistic optimum. Good if you can plan possible train adjustments and how real optimum can be achieved emergent during simulation.
+
+## better testing
+
+add mode  fixed length rail line. so after parameter change in this mode show not rolling average but sum total of whole line.
+
+this make easy to compare with previous settings.
+
+add ability to have N same seed lines with same stations but different trains to compare total profit and time.
