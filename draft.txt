@@ -40,7 +40,9 @@ realistic train speed and torque characteristics (similar to Railroad Tycoon 3, 
 
 train consume some resource and have adjustable storage for it (buy automatically)
 
-competitor train(s) - use same line. trains can push each other or choose to move in other direction because map is wrap-X.
+competitor train(s) game modes:
+- parallel tracks, contest on profit and speed.
+- use same line. trains can push each other or choose to move in other direction because map is wrap-X.
 
 improve path and tactics of bot.
 
@@ -58,7 +60,7 @@ reimplement movement rule as follow:
 
 - train have some big amount of money to trade, we interesting only in change per time to see efficiency
 
-i think this will simplify and make more aasy to concentrate development on more important goals.
+i think this will simplify and make more easy to concentrate development on more important goals.
 
 - player can reconfigure train and railroad, as draft say.
 
@@ -71,3 +73,14 @@ add mode  fixed length rail line. so after parameter change in this mode show no
 this make easy to compare with previous settings.
 
 add ability to have N same seed lines with same stations but different trains to compare total profit and time.
+
+###
+train skin friction ~ length
+
+### heightmap
+
+- flat
+- visually flat colormap slope angle
+- Y height with some reasonable scale
+
+heightmap - affect speed vs weight and engine force

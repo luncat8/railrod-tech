@@ -172,7 +172,9 @@ assert(Number(elements["time-value"].textContent) > 0, "sim time telemetry advan
 // follow — the canvas is a still — so the hover is read before the clock moves on
 Main.setSeed(424242);
 
-canvas.handlers["mousemove"][0]({ clientX: 600, clientY: 500 });
+var hoverState = inspect();
+var hoverY = RR.Render.trackYAt(hoverState.view, hoverState.sim.world, hoverState.sim.world.x[0]) - 30;
+canvas.handlers["mousemove"][0]({ clientX: 600, clientY: hoverY });
 assert.strictEqual(label.hidden, false, "hover shows the node label");
 assert(label.innerHTML.indexOf("NODE 0") !== -1, "label names the hovered node");
 assert(label.innerHTML.indexOf("/") !== -1, "label lists yard stock");
@@ -441,6 +443,7 @@ for (c = 0; c < 4; c += 1) {
 	target.handlers["pointerdown"][0]({ target: target });
 	assert.strictEqual(plotBox.hidden, false, "touching a build control shows its plot");
 	assert(plotsDrawn > 0, "and the plot is drawn");
+	if (c === 0) assert(plotCanvas.height > plotCanvas.width * 0.7, "the wagon plot stacks its air-drag chart");
 	if (c === 2) assert(plotCanvas.height > plotCanvas.width * 0.7, "the wheel plot stacks a second chart");
 }
 Main.setKnob(Tech.GAUGE, 1);

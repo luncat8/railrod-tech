@@ -22,6 +22,11 @@
 		NODE_N: 14,
 		RES_N: 3,
 		MIN_GAP_KM: 2.5,
+		TERRAIN_N: 256,
+		TERRAIN_RELIEF_M: 60,
+		TERRAIN_Y_PX_PER_M: 0.34,
+		TERRAIN_BED_PX: 8,
+		TERRAIN_SLOPE_MAX_DEG: 4,
 		SRC_BASE_MIN: 6,
 		SRC_BASE_MAX: 14,
 		CON_BASE_MIN: 18,
@@ -63,6 +68,8 @@
 		// c_drag is per unit of frontal area: the air a build pushes is the area the
 		// loading gauge gives it, times this. see Tech.areaOf
 		C_DRAG: 8.4,
+		C_SKIN: 0.04,    // aerodynamic drag coefficient per locomotive / wagon length unit
+		LOCO_LENGTH_UNITS: 1,
 		MU: 0.3,         // wheel/rail adhesion
 		DRIVE_SHARE: 0.65,
 		// scaled gravity: the visual band is 1-2 km/s, so adhesion and rolling

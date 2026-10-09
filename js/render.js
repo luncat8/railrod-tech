@@ -3,6 +3,7 @@
 
 	var RR = root.RR || (root.RR = {});
 	var C = RR.Const;
+	var World = RR.World;
 	var Render = RR.Render || {};
 
 	var SKY = "#141a16";
@@ -66,6 +67,63 @@
 		view.context.setTransform(dpr, 0, 0, dpr, 0, 0);
 	};
 
+	var TERRAIN_COLOR_N = 33;
+	var TERRAIN_COLOR_MID = (TERRAIN_COLOR_N - 1) * 0.5;
+
+	function hexChannel(value) {
+		var hex = Math.round(value).toString(16);
+
+		return hex.length < 2 ? "0" + hex : hex;
+	}
+
+	function makeTerrainPalette() {
+		var palette = new Array(TERRAIN_COLOR_N);
+		var downhill = [25, 38, 42];
+		var flat = [14, 18, 15];
+		var uphill = [39, 34, 21];
+		var i;
+		var t;
+		var from;
+		var to;
+		var red;
+		var green;
+		var blue;
+
+		for (i = 0; i < TERRAIN_COLOR_N; i += 1) {
+			t = i / TERRAIN_COLOR_MID;
+			if (t < 1) {
+				from = downhill;
+				to = flat;
+			} else {
+				from = flat;
+				to = uphill;
+				t -= 1;
+			}
+			red = from[0] + (to[0] - from[0]) * t;
+			green = from[1] + (to[1] - from[1]) * t;
+			blue = from[2] + (to[2] - from[2]) * t;
+			palette[i] = "#" + hexChannel(red) + hexChannel(green) + hexChannel(blue);
+		}
+		return palette;
+	}
+
+	var TERRAIN_PALETTE = makeTerrainPalette();
+
+	function terrainColor(angle) {
+		var limit = C.TERRAIN_SLOPE_MAX_DEG * Math.PI / 180;
+		var index = Math.round(TERRAIN_COLOR_MID + angle / limit * TERRAIN_COLOR_MID);
+
+		if (index < 0) index = 0;
+		else if (index >= TERRAIN_COLOR_N) index = TERRAIN_COLOR_N - 1;
+		return TERRAIN_PALETTE[index];
+	}
+
+	Render.terrainColor = terrainColor;
+
+	Render.trackYAt = function (view, world, x) {
+		return view.trackY - World.terrainHeightAt(world, x) * C.TERRAIN_Y_PX_PER_M;
+	};
+
 	// ring copy of x nearest to the camera; keeps the wrap seam off screen
 	Render.copyOffset = function (x, cameraX, ringKm) {
 		return Math.round((cameraX - x) / ringKm) * ringKm;
@@ -85,17 +143,16 @@
 	// nearest node whose screen column is within HIT_HALF of px, inside the node band
 	Render.hitNode = function (view, sim, px, py) {
 		var world = sim.world;
-		var top = view.trackY - BAR_BASE - BAR_H - 3;
-		var bottom = view.trackY + 4;
 		var best = -1;
 		var bestDist = HIT_HALF;
 		var i;
 		var sx;
+		var trackY;
 		var d;
 
-		if (py < top || py > bottom) return -1;
-
 		for (i = 0; i < world.nodeCount; i += 1) {
+			trackY = Render.trackYAt(view, world, world.x[i]);
+			if (py < trackY - BAR_BASE - BAR_H - 3 || py > trackY + 4) continue;
 			sx = Render.screenX(world.x[i], view.cameraX, view.pxPerKm, view.width, C.RING_KM);
 			d = Math.abs(px - sx);
 			if (d <= bestDist) {
@@ -119,21 +176,90 @@
 		view.cameraX = Render.cameraStep(view.cameraX, sim.trains[0].x, C.RING_KM, Math.min(1, C.CAMERA_FOLLOW * frameDt));
 	}
 
-	function drawTies(view) {
+	function drawTerrain(view, world) {
+		var context = view.context;
+		var sampleKm = C.RING_KM / world.terrain.length;
+		var halfKm = view.width * 0.5 / view.pxPerKm + sampleKm;
+		var first = Math.floor((view.cameraX - halfKm) / sampleKm);
+		var last = Math.ceil((view.cameraX + halfKm) / sampleKm);
+		var groundBase = Math.min(view.height, view.trackY + C.TERRAIN_BED_PX
+			+ C.TERRAIN_RELIEF_M * C.TERRAIN_Y_PX_PER_M + 1);
+		var i;
+		var index;
+		var next;
+		var worldX;
+		var sx0;
+		var sx1;
+		var y0;
+		var y1;
+		var slope;
+
+		context.fillStyle = GROUND;
+		context.fillRect(0, groundBase, view.width, view.height - groundBase);
+		for (i = first; i < last; i += 1) {
+			index = i % world.terrain.length;
+			if (index < 0) index += world.terrain.length;
+			next = (index + 1) % world.terrain.length;
+			worldX = i * sampleKm;
+			sx0 = (worldX - view.cameraX) * view.pxPerKm + view.width * 0.5;
+			sx1 = (worldX + sampleKm - view.cameraX) * view.pxPerKm + view.width * 0.5;
+			y0 = view.trackY + C.TERRAIN_BED_PX - world.terrain[index] * C.TERRAIN_Y_PX_PER_M;
+			y1 = view.trackY + C.TERRAIN_BED_PX - world.terrain[next] * C.TERRAIN_Y_PX_PER_M;
+			slope = Math.atan2(world.terrain[next] - world.terrain[index], sampleKm * 1000);
+			context.fillStyle = terrainColor(slope);
+			context.beginPath();
+			context.moveTo(sx0, y0);
+			context.lineTo(sx1, y1);
+			context.lineTo(sx1, view.height);
+			context.lineTo(sx0, view.height);
+			context.closePath();
+			context.fill();
+		}
+	}
+
+	function drawTies(view, world) {
 		var context = view.context;
 		var halfKm = view.width * 0.5 / view.pxPerKm + C.TIE_KM;
 		var first = Math.floor((view.cameraX - halfKm) / C.TIE_KM);
 		var last = Math.ceil((view.cameraX + halfKm) / C.TIE_KM);
 		var i;
+		var x;
 		var sx;
+		var y;
 
 		context.strokeStyle = TIE;
 		context.lineWidth = 2;
 		context.beginPath();
 		for (i = first; i <= last; i += 1) {
-			sx = (i * C.TIE_KM - view.cameraX) * view.pxPerKm + view.width * 0.5;
-			context.moveTo(sx + 0.5, view.trackY - 7);
-			context.lineTo(sx + 0.5, view.trackY + 7);
+			x = i * C.TIE_KM;
+			sx = (x - view.cameraX) * view.pxPerKm + view.width * 0.5;
+			y = Render.trackYAt(view, world, x);
+			context.moveTo(sx + 0.5, y - 7);
+			context.lineTo(sx + 0.5, y + 7);
+		}
+		context.stroke();
+	}
+
+	function drawRail(view, world) {
+		var context = view.context;
+		var sampleKm = C.RING_KM / world.terrain.length;
+		var halfKm = view.width * 0.5 / view.pxPerKm + sampleKm;
+		var first = Math.floor((view.cameraX - halfKm) / sampleKm);
+		var last = Math.ceil((view.cameraX + halfKm) / sampleKm);
+		var i;
+		var x;
+		var sx;
+		var y;
+
+		context.strokeStyle = TRACK;
+		context.lineWidth = 2;
+		context.beginPath();
+		for (i = first; i <= last; i += 1) {
+			x = i * sampleKm;
+			sx = (x - view.cameraX) * view.pxPerKm + view.width * 0.5;
+			y = Render.trackYAt(view, world, x);
+			if (i === first) context.moveTo(sx, y + 0.5);
+			else context.lineTo(sx, y + 0.5);
 		}
 		context.stroke();
 	}
@@ -142,22 +268,23 @@
 		var context = view.context;
 		var world = sim.world;
 		var sx = Render.screenX(world.x[i], view.cameraX, view.pxPerKm, view.width, C.RING_KM);
+		var trackY = Render.trackYAt(view, world, world.x[i]);
 
 		if (sx < -40 || sx > view.width + 40) return;
 
 		context.fillStyle = NODE_BODY;
-		context.fillRect(sx - 8, view.trackY - 20, 16, 20);
+		context.fillRect(sx - 8, trackY - 20, 16, 20);
 		context.fillStyle = world.kind[i] === RR.World.SRC ? SRC_CAP : CON_CAP;
-		context.fillRect(sx - 8, view.trackY - 26, 16, 6);
+		context.fillRect(sx - 8, trackY - 26, 16, 6);
 		context.fillStyle = TIE;
-		context.fillRect(sx - 16, view.trackY - 2, 32, 2);
-		drawYardBars(view, world, i, sx);
+		context.fillRect(sx - 16, trackY - 2, 32, 2);
+		drawYardBars(view, world, i, sx, trackY);
 	}
 
 	// three yard bars above the node, one per resource, each with a price tick
-	function drawYardBars(view, world, i, sx) {
+	function drawYardBars(view, world, i, sx, trackY) {
 		var context = view.context;
-		var bottom = view.trackY - BAR_BASE;
+		var bottom = trackY - BAR_BASE;
 		var res = C.RES_N;
 		var r;
 		var idx;
@@ -189,11 +316,10 @@
 	// one wagon: a stack of slots, one per unit the gauge allows it to carry. a slot
 	// holds a unit or shows as empty; cargo left in a slot the gauge no longer offers
 	// is drawn too, so nothing aboard is ever invisible
-	function drawWagon(view, train, wx, w, color) {
+	function drawWagon(view, train, wx, w, color, trackY) {
 		var context = view.context;
-		var hold = train.build.wagonHold;
 		var height = 4 + C.HOLD_MAX * SLOT_H;
-		var top = view.trackY - 6 - height;
+		var top = trackY - 6 - height;
 		var capacity = RR.Train.capacity(train);
 		var slot;
 		var k;
@@ -221,7 +347,7 @@
 	}
 
 	// the train runs +x, so the loco leads on the right and wagons trail to the left
-	function drawConsist(view, train, sx, color) {
+	function drawConsist(view, train, sx, color, trackY) {
 		var context = view.context;
 		var half = consistHalf(train.wagons);
 		var head = sx + half - LOCO_W;
@@ -229,21 +355,21 @@
 		var w;
 
 		context.fillStyle = color;
-		context.fillRect(head, view.trackY - 14, LOCO_W, 12);
-		context.fillRect(head + LOCO_W - 9, view.trackY - 22, 9, 8);
+		context.fillRect(head, trackY - 14, LOCO_W, 12);
+		context.fillRect(head + LOCO_W - 9, trackY - 22, 9, 8);
 		for (w = 0; w < train.wagons; w += 1) {
-			drawWagon(view, train, wx, w, color);
+			drawWagon(view, train, wx, w, color, trackY);
 			wx -= WAGON_PITCH;
 		}
-		context.fillRect(sx - half - 2, view.trackY - 4, 2 * half + 4, 3);
+		context.fillRect(sx - half - 2, trackY - 4, 2 * half + 4, 3);
 	}
 
 	// dwell progress above the consist: the transfer time the stop needs
-	function drawDwell(view, train, sx) {
+	function drawDwell(view, train, sx, trackY) {
 		var context = view.context;
 		var half = consistHalf(train.wagons);
 		var done = 1 - train.dwellLeft / train.dwellTotal;
-		var top = view.trackY - 30;
+		var top = trackY - 30;
 
 		if (done < 0) done = 0;
 		else if (done > 1) done = 1;
@@ -257,9 +383,10 @@
 	function drawTrain(view, sim, paused) {
 		var train = sim.trains[0];
 		var sx = Render.screenX(train.x, view.cameraX, view.pxPerKm, view.width, C.RING_KM);
+		var trackY = Render.trackYAt(view, sim.world, train.x);
 
-		drawConsist(view, train, sx, paused ? TRAIN_DIM : TRAIN_BODY);
-		if (train.state === RR.Train.DWELL) drawDwell(view, train, sx);
+		drawConsist(view, train, sx, paused ? TRAIN_DIM : TRAIN_BODY, trackY);
+		if (train.state === RR.Train.DWELL) drawDwell(view, train, sx, trackY);
 	}
 
 	// ---- performance panel: measured net rate against train mass, from the sweep ----
@@ -675,18 +802,10 @@
 		updateCamera(view, sim, frameDt);
 
 		context.fillStyle = SKY;
-		context.fillRect(0, 0, width, view.trackY);
-		context.fillStyle = GROUND;
-		context.fillRect(0, view.trackY, width, height - view.trackY);
-
-		drawTies(view);
-
-		context.strokeStyle = TRACK;
-		context.lineWidth = 2;
-		context.beginPath();
-		context.moveTo(0, view.trackY + 0.5);
-		context.lineTo(width, view.trackY + 0.5);
-		context.stroke();
+		context.fillRect(0, 0, width, height);
+		drawTerrain(view, world);
+		drawTies(view, world);
+		drawRail(view, world);
 
 		for (i = 0; i < world.nodeCount; i += 1) drawNode(view, sim, i);
 		drawTrain(view, sim, paused);

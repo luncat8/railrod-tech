@@ -3,6 +3,7 @@
 
 	var RR = root.RR || (root.RR = {});
 	var C = RR.Const;
+	var World = RR.World;
 	var Tech = RR.Tech;
 	var Train = RR.Train;
 	var Plot = RR.Plot || {};
@@ -60,6 +61,7 @@
 			note: "",
 			markerX: 0,
 			marker: 0,
+			slopeRad: 0,
 			charts: [makeChart(), makeChart()],
 			chartN: 1,
 			knobs: Tech.defaultKnobs(),
@@ -143,17 +145,23 @@
 		var mass = chart.series[0];
 		var loaded = chart.series[1];
 		var swap = chart.series[2];
+		var dragChart = plot.charts[1];
+		var skin = dragChart.series[0];
 		var w;
 		var hold;
 		var m;
 		var i;
 
-		plot.title = "WAGONS · WEIGHT AND LOAD TIME";
-		plot.note = "A FULL UNLOAD AND RELOAD AT " + build.transferRate.toFixed(1) + " UNITS/S";
+		plot.title = "WAGONS · WEIGHT AND LENGTH";
+		plot.note = "LOAD TIME · SKIN DRAG AT " + build.vTrack.toFixed(2) + " KM/S";
 		setChart(chart, "WAGONS", 0, C.WAGON_MIN, C.WAGON_MAX, true, 3);
 		setSeries(mass, "MASS", "T", 0);
 		setSeries(loaded, "LOADED", "T", 0);
 		setSeries(swap, "LOAD+UNLOAD", "S", 1);
+
+		plot.chartN = 2;
+		setChart(dragChart, "WAGONS", 0, C.WAGON_MIN, C.WAGON_MAX, true, 1);
+		setSeries(skin, "SKIN DRAG", "F", 2);
 
 		for (i = 0; i <= SAMPLES; i += 1) {
 			w = i < SAMPLES ? Math.round(sampleX(C.WAGON_MIN, C.WAGON_MAX, i)) : train.wagons;
@@ -162,6 +170,9 @@
 			put(mass, m, i);
 			put(loaded, m + hold * C.UNIT_T, i);
 			put(swap, 2 * hold / build.transferRate, i);
+
+			plot.train.wagons = w;
+			put(skin, Train.skinDragForce(plot.train, build.vTrack), i);
 		}
 	}
 
@@ -186,13 +197,13 @@
 			buildAt(plot, Tech.GAUGE, gaugeOf(xAt(plot, i, C.GAUGE_MIN_M, C.GAUGE_MAX_M, Tech.gaugeM)));
 			plot.train.wagons = train.wagons;
 			put(hold, Train.capacity(plot.train) * C.UNIT_T, i);
-			m = plot.build.mLoco + train.wagons * plot.build.mWagon;
+			m = Train.mass(plot.train);
 			v = plot.build.vTrack;
 			put(mass, m, i);
 			// the deceleration the air costs at the build's own line speed: what the
 			// gauge buys in hold it pays for here, and past the middle of the slider
 			// that is what stops the train reaching the speed it is allowed
-			put(air, C.C_DRAG * plot.build.dragArea * v * v * v / m, i);
+			put(air, Train.airDragForce(plot.train, v) / m, i);
 		}
 		buildAt(plot, Tech.GAUGE, plot.knobs[Tech.GAUGE]);
 	}
@@ -206,23 +217,24 @@
 		var accel = chart.series[1];
 		var brake = chart.series[2];
 		var probe = plot.train;
+		var gradePercent = Math.tan(plot.slopeRad) * 100;
 		var i;
 		var vTop;
 
 		plot.title = "WHEEL · FRICTION AND MASS";
-		plot.note = "ACCEL OUT OF A STOP · BRAKE FROM LINE SPEED";
+		plot.note = "GRADE " + (gradePercent > 0 ? "+" : "") + gradePercent.toFixed(1) + "% · ACCEL FROM REST";
 		setChart(chart, "WHEEL M", 2, C.WHEEL_MIN_M, C.WHEEL_MAX_M, true, 3);
 		setSeries(mass, "MASS", "T", 0);
 		setSeries(accel, "ACCEL", "KM/S²", 2);
 		setSeries(brake, "BRAKE", "KM", 2);
 
 		probe.wagons = train.wagons;
-		probe.cargoUnits = 0;
+		probe.cargoUnits = train.cargoUnits;
 		vTop = 0;
 		for (i = 0; i <= SAMPLES; i += 1) {
 			buildAt(plot, Tech.WHEEL, wheelOf(xAt(plot, i, C.WHEEL_MIN_M, C.WHEEL_MAX_M, Tech.wheelM)));
-			put(mass, plot.build.mLoco + train.wagons * plot.build.mWagon, i);
-			put(accel, Train.accel(probe, 0), i);
+			put(mass, Train.mass(probe), i);
+			put(accel, Train.accel(probe, 0, plot.slopeRad), i);
 			put(brake, plot.build.vTrack * plot.build.vTrack / (2 * C.BRAKE_DECEL), i);
 			if (plot.build.vTrack > vTop) vTop = plot.build.vTrack;
 		}
@@ -252,12 +264,41 @@
 
 		for (i = 0; i < SAMPLES; i += 1) {
 			v = sampleX(0, vTop, i);
-			mine.values[i] = Train.accel(probe, v);
+			mine.values[i] = Train.accel(probe, v, plot.slopeRad);
 			buildAt(plot, Tech.WHEEL, C.KNOB_MIN);
-			narrow.values[i] = Train.accel(probe, v);
+			narrow.values[i] = Train.accel(probe, v, plot.slopeRad);
 			buildAt(plot, Tech.WHEEL, C.KNOB_MAX);
-			wide.values[i] = Train.accel(probe, v);
+			wide.values[i] = Train.accel(probe, v, plot.slopeRad);
 			buildAt(plot, Tech.WHEEL, held);
+		}
+	}
+
+	// The acceleration chart applies the live grade to the current engine and both ends
+	// of the engine slider, so force and total train mass meet in the movement model.
+	function engineSpeedChart(plot, vTop, currentEngine) {
+		var chart = plot.charts[1];
+		var current = chart.series[0];
+		var low = chart.series[1];
+		var high = chart.series[2];
+		var probe = plot.train;
+		var i;
+		var v;
+
+		setChart(chart, "SPEED KM/S", 2, 0, vTop, false, 3);
+		setSeries(current, "CURRENT ENGINE", "KM/S²", 2);
+		setSeries(low, Tech.mLocoOf(C.KNOB_MIN).toFixed(0) + " T LOCO", "KM/S²", 2);
+		setSeries(high, Tech.mLocoOf(C.KNOB_MAX).toFixed(0) + " T LOCO", "KM/S²", 2);
+		low.color = FAINT;
+		high.color = FAINT;
+
+		for (i = 0; i < SAMPLES; i += 1) {
+			v = sampleX(0, vTop, i);
+			current.values[i] = Train.accel(probe, v, plot.slopeRad);
+			buildAt(plot, Tech.ENGINE, C.KNOB_MIN);
+			low.values[i] = Train.accel(probe, v, plot.slopeRad);
+			buildAt(plot, Tech.ENGINE, C.KNOB_MAX);
+			high.values[i] = Train.accel(probe, v, plot.slopeRad);
+			buildAt(plot, Tech.ENGINE, currentEngine);
 		}
 	}
 
@@ -273,10 +314,13 @@
 		var vTrack = plot.build.vTrack;
 		var lo = Tech.mLocoOf(C.KNOB_MIN);
 		var hi = Tech.mLocoOf(C.KNOB_MAX);
+		var currentEngine = plot.knobs[Tech.ENGINE];
+		var gradePercent = Math.tan(plot.slopeRad) * 100;
 		var i;
 
 		plot.title = "ENGINE · FORCE AND MASS";
-		plot.note = "ADHESION LIMIT AGAINST THE POWER LEFT AT " + vTrack.toFixed(2) + " KM/S";
+		plot.note = "GRADE " + (gradePercent > 0 ? "+" : "") + gradePercent.toFixed(1) + "% · ACCEL BELOW";
+		plot.chartN = 2;
 		setChart(chart, "LOCO T", 0, lo, hi, true, 3);
 		setSeries(force, "FORCE", "MN", 1);
 		setSeries(limited, "P / V", "MN", 1);
@@ -286,9 +330,11 @@
 			buildAt(plot, Tech.ENGINE, locoOf(i < SAMPLES ? sampleX(lo, hi, i) : Tech.mLocoOf(plot.knobs[Tech.ENGINE])));
 			put(force, plot.build.fTrac, i);
 			put(limited, plot.build.power / vTrack, i);
-			put(mass, plot.build.mLoco + train.wagons * plot.build.mWagon, i);
+			put(mass, Train.mass(plot.train), i);
 		}
-		buildAt(plot, Tech.ENGINE, plot.knobs[Tech.ENGINE]);
+		buildAt(plot, Tech.ENGINE, currentEngine);
+		engineSpeedChart(plot, vTrack, currentEngine);
+		buildAt(plot, Tech.ENGINE, currentEngine);
 	}
 
 	var PLOTS = [wagonsPlot, gaugePlot, wheelPlot, enginePlot];
@@ -329,9 +375,10 @@
 		plot.chartN = 1;
 		plot.knobs.set(sim.knobs);
 		Tech.deriveInto(plot.build, plot.knobs);
+		plot.slopeRad = World.terrainSlopeAt(sim.world, train.x);
 		plot.train.build = plot.build;
 		plot.train.wagons = train.wagons;
-		plot.train.cargoUnits = 0;
+		plot.train.cargoUnits = train.cargoUnits;
 
 		PLOTS[control](plot, sim);
 

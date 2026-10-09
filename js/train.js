@@ -70,6 +70,28 @@
 		return train.build.mLoco + train.wagons * train.build.mWagon + train.cargoUnits * C.UNIT_T;
 	};
 
+	Train.frontalDragForce = function (train, v) {
+		return C.C_DRAG * train.build.dragArea * v * v * v;
+	};
+
+	Train.skinDragForce = function (train, v) {
+		return C.C_SKIN * (C.LOCO_LENGTH_UNITS + train.wagons) * v * v * v;
+	};
+
+	Train.airDragForce = function (train, v) {
+		return (C.C_DRAG * train.build.dragArea + C.C_SKIN * (C.LOCO_LENGTH_UNITS + train.wagons)) * v * v * v;
+	};
+
+	// Positive grade rises in the train's +x direction; its signed load opposes the
+	// engine uphill and assists it downhill. The load grows with the mass being hauled.
+	function gradeForceForMass(mass, slopeRad) {
+		return mass * C.TRAIN_G * Math.sin(slopeRad || 0);
+	}
+
+	Train.gradeForce = function (train, slopeRad) {
+		return gradeForceForMass(Train.mass(train), slopeRad);
+	};
+
 	// payload: how many slots the consist offers, rounded down to whole units. cargo
 	// loaded under a wider gauge stays aboard if the gauge is then narrowed, and
 	// simply counts against the hold while it does
@@ -94,21 +116,22 @@
 		return -1;
 	};
 
-	// signed net acceleration; resistance may exceed traction and slow the train
-	Train.accel = function (train, v) {
+	// signed net acceleration; resistance may exceed traction and slow the train. The
+	// caller supplies the local terrain slope as a signed angle in radians.
+	Train.accel = function (train, v, slopeRad) {
 		var build = train.build;
 		var mass = Train.mass(train);
 		var force = Math.min(build.fTrac, build.power / Math.max(v, C.V_EPS));
-		var resistance = build.cRR * mass * C.TRAIN_G + C.C_DRAG * build.dragArea * v * v * v;
+		var resistance = build.cRR * mass * C.TRAIN_G + Train.airDragForce(train, v);
 
-		return (force - resistance) / mass;
+		return (force - resistance - gradeForceForMass(mass, slopeRad)) / mass;
 	};
 
 	// above the cap the brakes act, at least BRAKE_DECEL and harder if needed to
 	// stop exactly at the stop: the cap curve falls faster than BRAKE_DECEL once the
 	// train is above it, so a constant brake would overshoot. below the cap,
 	// traction and resistance act and the cap is never exceeded
-	function nextSpeed(train, dt, vCap, stopKm) {
+	function nextSpeed(train, dt, vCap, stopKm, slopeRad) {
 		var v = train.v;
 		var decel;
 		var next;
@@ -119,16 +142,17 @@
 			next = v - decel * dt;
 			return next > 0 ? next : 0;
 		}
-		next = v + Train.accel(train, v) * dt;
+		next = v + Train.accel(train, v, slopeRad) * dt;
 		if (next > vCap) next = vCap;
 		return next > 0 ? next : 0;
 	}
 
 	// one kinematics step under a speed cap and a stop distance (0 = no stop ahead);
+	// slopeRad is positive uphill and defaults to flat for isolated kinematics checks
 	// returns km covered, x stays wrapped and the odometer does not
-	Train.advance = function (train, dt, vCap, stopKm) {
+	Train.advance = function (train, dt, vCap, stopKm, slopeRad) {
 		var v0 = train.v;
-		var v1 = nextSpeed(train, dt, vCap, stopKm);
+		var v1 = nextSpeed(train, dt, vCap, stopKm, slopeRad);
 		var ds = 0.5 * (v0 + v1) * dt;
 
 		train.v = v1;
@@ -191,14 +215,16 @@
 
 	function cruise(train, world, dt) {
 		var vCap;
+		var slopeRad;
 		var ds;
 
 		scanStop(train, world);
+		slopeRad = World.terrainSlopeAt(world, train.x);
 		vCap = train.build.vTrack;
 		if (train.stopNode >= 0) {
 			vCap = Math.min(vCap, Math.sqrt(2 * C.BRAKE_DECEL * train.stopKm));
 		}
-		ds = Train.advance(train, dt, vCap, train.stopNode >= 0 ? train.stopKm : 0);
+		ds = Train.advance(train, dt, vCap, train.stopNode >= 0 ? train.stopKm : 0, slopeRad);
 		if (train.stopNode >= 0 && ds >= train.stopKm) arrive(train, world, train.stopNode);
 	}
 

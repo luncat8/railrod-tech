@@ -1,9 +1,10 @@
 # Deferred — trading planner, auto-trader, and parked trip estimate
 
 Parked from `0.1.0-plan.md` when the movement rule was reset to a one-way trade
-loop. Nothing in this file is implemented. Read it when a planner or a
-richer trading rule is picked up again; the trade core it builds on is the
-loop-trade milestone in `archive/0.1.4-plan.md`.
+loop. The planner and richer trading rules in this file are not implemented. Read
+it when that work is picked up again; the trade core it builds on is the loop-trade
+milestone in `archive/0.1.4-plan.md`. The terrain profile now drives grade-aware
+movement in 0.2.1; route planning and pathfinding remain deferred.
 
 ## 1. Parked milestone: trading and profit (original 0.1.4)
 
@@ -137,7 +138,9 @@ compares measured and planned times again.
 
 These remain in `0.1.0-plan.md` under "Deferred (0.2+)": torque realism, fuel
 (the train buys its own fuel through the node price model), competitor trains,
-bot tactics, and heightmap. Trade-related additions that were parked here:
+bot tactics, and pathfinding over the rendered heightmap. Single-route grade
+resistance is implemented; route planning is not. Trade-related additions that
+were parked here:
 
 - sources buying back cargo (a sale at a high-stock source; needs a source-side
   sell rule and a check against same-node round trips);

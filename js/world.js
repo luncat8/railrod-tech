@@ -5,6 +5,7 @@
 	var Rng = RR.Rng;
 	var C = RR.Const;
 	var World = RR.World || {};
+	var TERRAIN_WEIGHT = [0.42, 0.27, 0.18, 0.09];
 
 	World.SRC = 0;
 	World.CON = 1;
@@ -19,6 +20,48 @@
 		var d = Math.abs(a - b) % C.RING_KM;
 		return Math.min(d, C.RING_KM - d);
 	};
+
+	World.terrainHeightAt = function (world, x) {
+		var terrain = world.terrain;
+		var stepKm = C.RING_KM / terrain.length;
+		var position = World.wrap(x) / stepKm;
+		var index = Math.floor(position);
+		var next = (index + 1) % terrain.length;
+		var fraction = position - index;
+
+		return terrain[index] + (terrain[next] - terrain[index]) * fraction;
+	};
+
+	// Signed tangent angle in radians along +x, averaged over one sample either side.
+	World.terrainSlopeAt = function (world, x) {
+		var stepKm = C.RING_KM / world.terrain.length;
+		var rise = World.terrainHeightAt(world, x + stepKm) - World.terrainHeightAt(world, x - stepKm);
+
+		return Math.atan(rise / (2 * stepKm * 1000));
+	};
+
+	function fillTerrain(rng, terrain) {
+		var phases = [
+			Rng.nextFloat(rng) * Math.PI * 2,
+			Rng.nextFloat(rng) * Math.PI * 2,
+			Rng.nextFloat(rng) * Math.PI * 2,
+			Rng.nextFloat(rng) * Math.PI * 2
+		];
+		var scale = C.TERRAIN_RELIEF_M;
+		var angleStep = Math.PI * 2 / terrain.length;
+		var angle;
+		var i;
+
+		for (i = 0; i < terrain.length; i += 1) {
+			angle = i * angleStep;
+			terrain[i] = scale * (
+				TERRAIN_WEIGHT[0] * Math.sin(angle + phases[0])
+				+ TERRAIN_WEIGHT[1] * Math.sin(angle * 2 + phases[1])
+				+ TERRAIN_WEIGHT[2] * Math.sin(angle * 4 + phases[2])
+				+ TERRAIN_WEIGHT[3] * Math.sin(angle * 8 + phases[3])
+			);
+		}
+	}
 
 	function placeNodes(rng, x) {
 		var slot = C.RING_KM / C.NODE_N;
@@ -115,6 +158,7 @@
 		return {
 			nodeCount: n,
 			ringKm: C.RING_KM,
+			terrain: new Float32Array(C.TERRAIN_N),
 			x: new Float32Array(n),
 			kind: new Int8Array(n),
 			need: new Int8Array(n),
@@ -135,6 +179,7 @@
 
 	// one array per field: dst ends up holding the same world, in its own memory
 	World.copyInto = function (dst, src) {
+		dst.terrain.set(src.terrain);
 		dst.x.set(src.x);
 		dst.kind.set(src.kind);
 		dst.need.set(src.need);
@@ -165,6 +210,7 @@
 			if (world.kind[i] === World.SRC) fillSource(rng, world, i, srcs++);
 			else fillConsumer(rng, world, i, cons++);
 		}
+		fillTerrain(rng, world.terrain);
 
 		return world;
 	};

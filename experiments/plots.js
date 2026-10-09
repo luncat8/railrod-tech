@@ -7,7 +7,7 @@
 var assert = require("assert");
 var Const = require("../js/const.js");
 require("../js/rng.js");
-require("../js/world.js");
+var World = require("../js/world.js");
 require("../js/economy.js");
 var Tech = require("../js/tech.js");
 require("../js/trade.js");
@@ -65,25 +65,31 @@ function testCurvesAreFiniteAndBounded() {
 	}
 }
 
-// wagons: mass is linear in the wagon count, and the consist's hold with it. the
-// transfer time grows with the wagon count and only creeps up with the wagon size
-function testWagonsPlotIsWeightAndTransferTime() {
+// wagons: mass and skin drag grow with consist length; transfer time also reflects
+// the whole hold out and in, while creeping up with wagon size
+function testWagonsPlotShowsWeightTimeAndSkinDrag() {
 	var sim = simAt(SEEDS[0]);
 	var train = sim.trains[0];
 	var plot = plotFor(sim, Plot.WAGONS);
 	var mass = seriesOf(plot, 0, 0);
 	var loaded = seriesOf(plot, 0, 1);
 	var swap = seriesOf(plot, 0, 2);
+	var skin = seriesOf(plot, 1, 0);
 	var build = sim.trains[0].build;
 	var w;
 	var step;
 
 	// the x of this plot is whole wagons, so the curve is a staircase over them
+	assert.strictEqual(plot.chartN, 2, "the wagon plot includes its length-scaled air chart");
 	for (w = 1; w < Plot.SAMPLES; w += 1) {
 		assert(mass.values[w] >= mass.values[w - 1], "more wagons never weigh less");
 		assert(loaded.values[w] > mass.values[w], "a loaded consist weighs more than an empty one");
 		assert(swap.values[w] >= swap.values[w - 1], "more wagons never take less time to load and unload");
+		assert(skin.values[w] >= skin.values[w - 1], "skin drag never falls as the train grows");
 	}
+	assert(Math.abs(skin.values[Plot.SAMPLES - 1] - skin.values[0]
+		- Const.C_SKIN * (Const.WAGON_MAX - Const.WAGON_MIN) * Math.pow(build.vTrack, 3)) < 1e-9,
+		"the skin drag curve rises linearly per added wagon");
 	step = (mass.values[Plot.SAMPLES - 1] - mass.values[0]) / (Const.WAGON_MAX - Const.WAGON_MIN);
 	assert(Math.abs(step - build.mWagon) < 1e-6, "one wagon adds one wagon's weight");
 	assert(Math.abs(swap.values[Plot.SAMPLES - 1] - 2 * Train.capacity(full(train)) / build.transferRate) < 1e-9,
@@ -150,8 +156,8 @@ function testWheelPlotIsFrictionAndMass() {
 		assert(narrow.values[i] <= narrow.values[i - 1] + 1e-12, "at any wheel size");
 		assert(wide.values[i] <= wide.values[i - 1] + 1e-12, "at any wheel size");
 	}
-	assert(Math.abs(accel.values[0] - Train.accel(probeAt(sim, 0), 0)) < 1e-9,
-		"the acceleration the plot names is Train.accel at a standstill");
+	assert(Math.abs(accel.values[0] - Train.accel(probeAt(sim, 0), 0, World.terrainSlopeAt(sim.world, sim.trains[0].x))) < 1e-9,
+		"the acceleration plot includes the grade under the live train");
 	assert(Math.abs(brake.values[0] - Math.pow(Tech.vTrackOf(Const.KNOB_G, 0), 2) / (2 * Const.BRAKE_DECEL)) < 1e-9,
 		"the brake distance is the line speed stopped at the service rate");
 	assert(curve.values[Plot.SAMPLES - 1] < curve.values[0], "the power limit bites by the top of the range");
@@ -166,14 +172,14 @@ function full(train) {
 	return probe;
 }
 
-// the scratch train the plots measure with: the player's consist, empty, built to
-// the knobs of the sample the plot is drawing
+// the scratch train the plots measure with: the player's consist and live cargo,
+// built to the knobs of the sample the plot is drawing
 function probeAt(sim, wheelKnob) {
 	var knobs = [sim.knobs[Tech.GAUGE], wheelKnob, sim.knobs[Tech.ENGINE]];
 	var probe = Plot.create().train;
 
 	probe.wagons = sim.trains[0].wagons;
-	probe.cargoUnits = 0;
+	probe.cargoUnits = sim.trains[0].cargoUnits;
 	Tech.deriveInto(probe.build, knobs);
 	return probe;
 }
@@ -192,6 +198,8 @@ function testEnginePlotIsForceAgainstMass() {
 	var force;
 	var limited;
 	var mass;
+	var acceleration;
+	var slope;
 	var i;
 	var crossings = 0;
 
@@ -201,6 +209,12 @@ function testEnginePlotIsForceAgainstMass() {
 		force = seriesOf(plot, 0, 0);
 		limited = seriesOf(plot, 0, 1);
 		mass = seriesOf(plot, 0, 2);
+		assert.strictEqual(plot.chartN, 2, "the engine adds an acceleration-over-speed chart");
+		acceleration = seriesOf(plot, 1, 0);
+		slope = World.terrainSlopeAt(sim.world, sim.trains[0].x);
+		assert(Math.abs(acceleration.values[Plot.SAMPLES - 1]
+			- Train.accel(probeOf(sim), plot.charts[1].x1, slope)) < 1e-9,
+			"the engine acceleration curve includes the live heightmap grade");
 		for (i = 1; i < Plot.SAMPLES; i += 1) {
 			assert(force.values[i] > force.values[i - 1], "a heavier loco grips harder");
 			assert(limited.values[i] > limited.values[i - 1], "and carries more power");
@@ -230,21 +244,28 @@ function testPlotAgreesWithTheBuild() {
 		assert(Math.abs(seriesOf(plot, 0, 0).at - Train.tareMass(train)) < 1e-9, "mass at the marker is the consist");
 		assert(Math.abs(seriesOf(plot, 0, 2).at - 2 * Train.capacity(train) / build.transferRate) < 1e-9,
 			"dwell at the marker is the hold over the transfer rate");
+		assert(Math.abs(seriesOf(plot, 1, 0).at - Train.skinDragForce(train, build.vTrack)) < 1e-9,
+			"skin drag at the marker is the train's consist length");
 
 		plot = plotFor(sim, Plot.GAUGE);
 		assert(Math.abs(seriesOf(plot, 0, 0).at - Train.capacity(train) * Const.UNIT_T) < 1e-9,
 			"hold at the marker is the consist's hold");
-		assert(Math.abs(seriesOf(plot, 0, 1).at - Train.tareMass(train)) < 1e-9, "and its mass is the tare");
+		assert(Math.abs(seriesOf(plot, 0, 1).at - Train.mass(train)) < 1e-9, "and its mass includes the live cargo");
+		assert(Math.abs(seriesOf(plot, 0, 2).at
+			- Train.airDragForce(train, build.vTrack) / Train.mass(train)) < 1e-9,
+			"the air curve includes the consist's length-scaled skin drag");
 
 		plot = plotFor(sim, Plot.WHEEL);
-		assert(Math.abs(seriesOf(plot, 0, 1).at - Train.accel(probeOf(sim), 0)) < 1e-9,
-			"acceleration at the marker is the train's own");
+		assert(Math.abs(seriesOf(plot, 0, 1).at
+			- Train.accel(probeOf(sim), 0, World.terrainSlopeAt(sim.world, train.x))) < 1e-9,
+			"acceleration at the marker includes the live grade");
 		assert(Math.abs(seriesOf(plot, 0, 2).at - build.vTrack * build.vTrack / (2 * Const.BRAKE_DECEL)) < 1e-9,
 			"and so is the brake distance");
 
 		plot = plotFor(sim, Plot.ENGINE);
 		assert(Math.abs(seriesOf(plot, 0, 0).at - build.fTrac) < 1e-9, "force at the marker is the adhesion limit");
 		assert(Math.abs(seriesOf(plot, 0, 1).at - build.power / build.vTrack) < 1e-9, "and P / V is the power left");
+		assert(Math.abs(seriesOf(plot, 0, 2).at - Train.mass(train)) < 1e-9, "engine mass includes the live cargo load");
 	}
 }
 
@@ -276,11 +297,11 @@ function testPlotsFollowTheConsist() {
 }
 
 testCurvesAreFiniteAndBounded();
-testWagonsPlotIsWeightAndTransferTime();
+testWagonsPlotShowsWeightTimeAndSkinDrag();
 testGaugePlotIsHoldAgainstMassAndAir();
 testWheelPlotIsFrictionAndMass();
 testEnginePlotIsForceAgainstMass();
 testPlotAgreesWithTheBuild();
 testFillReusesThePlot();
 testPlotsFollowTheConsist();
-console.log("Plot checks passed: four build curves, finite and bounded, in the directions the knob contract states, the engine's power line crossing its adhesion line, and every curve agreeing with the build it reads.");
+console.log("Plot checks passed: four build-control curves, grade-aware wheel and engine acceleration, finite bounded series, engine force crossover, and values matching the live build.");

@@ -50,6 +50,33 @@ function lineWorld(km, srcStock) {
 	]);
 }
 
+function noTradeWorld() {
+	return makeWorld([
+		{ x: 0, kind: World.CON, need: R1 },
+		{ x: 20, kind: World.CON, need: R1 },
+		{ x: 40, kind: World.CON, need: R1 }
+	]);
+}
+
+function rampWorld() {
+	var world = noTradeWorld();
+	var x;
+	var i;
+
+	for (i = 0; i < world.terrain.length; i += 1) {
+		x = i * Const.RING_KM / world.terrain.length;
+		world.terrain[i] = Math.min(x, Const.RING_KM - x) * 10;
+	}
+	return world;
+}
+
+function loadedTrain(build, wagons) {
+	var train = Train.create(build, wagons);
+
+	train.cargoUnits = Train.capacity(train);
+	return train;
+}
+
 function freshTrain(wagons) {
 	return Train.create(Tech.derive(Tech.defaultKnobs()), wagons);
 }
@@ -211,7 +238,90 @@ function testNoStopRunsAtTrackSpeed() {
 		prevDwell = isDwelling(train);
 	}
 	assert.strictEqual(stops, 0, "no node wants the train, so it never stops");
-	assert(Math.abs(train.v - train.build.vTrack) < 1e-9, "it cruises at the track speed");
+	assert(Math.abs(train.v - train.build.vTrack) < 1e-9, "it cruises at the track speed cap on flat terrain");
+}
+
+function testGradeResistanceScalesWithMass() {
+	var build = Tech.derive(Tech.defaultKnobs());
+	var empty = Train.create(build, Const.WAGON_MAX);
+	var light = loadedTrain(build, 1);
+	var heavy = loadedTrain(build, Const.WAGON_MAX);
+	var slope = Math.atan(0.01);
+	var expected = Const.TRAIN_G * Math.sin(slope);
+	var flatAccel = Train.accel(heavy, 1, 0);
+	var uphillAccel = Train.accel(heavy, 1, slope);
+
+	assert(Train.mass(heavy) > Train.mass(light), "a full long consist has more mass to haul");
+	assert(Train.gradeForce(heavy, slope) > Train.gradeForce(empty, slope), "cargo mass adds to grade load");
+	assert(Train.gradeForce(heavy, slope) > Train.gradeForce(light, slope), "grade force grows with train mass");
+	assert(Math.abs(Train.gradeForce(heavy, slope) / Train.mass(heavy) - expected) < 1e-12,
+		"grade acceleration is gravity times the signed sine of the slope");
+	assert(Math.abs(flatAccel - uphillAccel - expected) < 1e-12,
+		"uphill grade takes the same gravity acceleration from a train of any mass");
+	assert(Train.accel(heavy, 1, slope) < Train.accel(light, 1, slope),
+		"the same engine accelerates the heavier loaded consist less uphill");
+}
+
+function testEngineForceChangesClimbAbility() {
+	var lowKnobs = Tech.defaultKnobs();
+	var highKnobs = Tech.defaultKnobs();
+	var slope = Math.atan(0.01);
+	var low;
+	var high;
+
+	lowKnobs[Tech.ENGINE] = Const.KNOB_MIN;
+	highKnobs[Tech.ENGINE] = Const.KNOB_MAX;
+	low = loadedTrain(Tech.derive(lowKnobs), 4);
+	high = loadedTrain(Tech.derive(highKnobs), 4);
+	assert(Train.accel(low, 0.5, slope) < 0, "the smallest engine loses speed on the climb");
+	assert(Train.accel(high, 0.5, slope) > 0, "the largest engine pulls the same consist uphill");
+}
+
+function testHeightmapChangesTravelSpeed() {
+	var uphillWorld = rampWorld();
+	var flatWorld = noTradeWorld();
+	var build = Tech.derive(Tech.defaultKnobs());
+	var uphillSlope = World.terrainSlopeAt(uphillWorld, 5);
+	var downhillSlope = World.terrainSlopeAt(uphillWorld, 40);
+	var uphill = loadedTrain(build, 4);
+	var flat = loadedTrain(build, 4);
+	var downhill = loadedTrain(build, 4);
+	var flatDownhill = loadedTrain(build, 4);
+
+	uphill.x = 5;
+	flat.x = 5;
+	downhill.x = 40;
+	flatDownhill.x = 40;
+	uphill.v = flat.v = downhill.v = flatDownhill.v = 1.4;
+	assert(uphillSlope > 0 && downhillSlope < 0, "the profile has a climb and a descent");
+
+	Train.step(uphill, uphillWorld, DT);
+	Train.step(flat, flatWorld, DT);
+	Train.step(downhill, uphillWorld, DT);
+	Train.step(flatDownhill, flatWorld, DT);
+	assert(uphill.v < flat.v, "the heightmap slows the same train on a climb");
+	assert(downhill.v > flatDownhill.v, "and helps it accelerate on a descent");
+}
+
+function testSkinDragScalesWithConsistLength() {
+	var shortTrain = freshTrain(1);
+	var longTrain = freshTrain(Const.WAGON_MAX);
+	var speed = 1.4;
+	var addedWagons = Const.WAGON_MAX - 1;
+	var expected = Const.C_SKIN * addedWagons * speed * speed * speed;
+	var build = shortTrain.build;
+	var force = Math.min(build.fTrac, build.power / speed);
+	var resistance = build.cRR * Train.mass(shortTrain) * Const.TRAIN_G;
+	var expectedAccel = (force - resistance - Train.airDragForce(shortTrain, speed)) / Train.mass(shortTrain);
+
+	assert.strictEqual(Train.frontalDragForce(shortTrain, speed), Train.frontalDragForce(longTrain, speed),
+		"the frontal drag is independent of consist length");
+	assert(Math.abs(Train.skinDragForce(longTrain, speed) - Train.skinDragForce(shortTrain, speed) - expected) < 1e-12,
+		"each added wagon contributes the same skin-friction drag");
+	assert(Math.abs(Train.airDragForce(longTrain, speed) - Train.airDragForce(shortTrain, speed) - expected) < 1e-12,
+		"total aerodynamic resistance carries the same length term");
+	assert(Math.abs(Train.accel(shortTrain, speed) - expectedAccel) < 1e-12,
+		"kinematics uses frontal and skin drag together");
 }
 
 function testTransferDwellMatchesUnits() {
@@ -400,6 +510,10 @@ testStopsOnlyWhereTradeIsWanted();
 testStopsAreExactAndBrakingStaysBounded();
 testLateStopStillArrivesExactly();
 testNoStopRunsAtTrackSpeed();
+testGradeResistanceScalesWithMass();
+testEngineForceChangesClimbAbility();
+testHeightmapChangesTravelSpeed();
+testSkinDragScalesWithConsistLength();
 testTransferDwellMatchesUnits();
 testSourceWithFewUnitsLoadsFewUnits();
 testStalledBuildSitsAtZero();
@@ -410,4 +524,4 @@ testTheTripLedger();
 testResetTakesTheBuildItIsGiven();
 testAnEmptyStopClosesNothing();
 testDeterminism();
-console.log("Train checks passed: one-way loop, wanted-only stops, exact braked stops, late stops, no-stop cruise, transfer dwell, wagon floor, knob change, the trip ledger, a build taken at a reset, determinism.");
+console.log("Train checks passed: one-way loop, wanted-only stops, exact braking, flat and grade-aware motion, weight and engine force on climbs, length-scaled drag, transfer dwell, wagon floor, knob changes, the trip ledger, reset builds, determinism.");

@@ -405,15 +405,16 @@ function testKnobChangeNeverJumpsTheMarket() {
 	assert(train.capexRate > capexBefore, "the wider gauge is charged more capital per second");
 	assert(Math.abs(sim.netRate - (sim.profitRate - train.capexRate)) < 1e-12, "NET is the re-priced difference, not a jump in profit");
 
-	// afterwards the yards keep moving only by what an ordinary step can move: one
-	// unit per wagon at a stop, plus a tick of inflow or consumption
+	// afterwards the yards keep moving only by what an ordinary step can move: the
+	// current hold at a stop, plus a tick of inflow or consumption
 	for (i = 0; i < 600; i += 1) {
 		prev = Array.from(world.stock);
 		Sim.step(sim, DT);
 		delta = maxStockStep(prev, world.stock);
 		if (delta > maxDelta) maxDelta = delta;
 	}
-	assert(maxDelta <= train.wagons + Const.RATE_MAX * DT, "no step after the change moved a yard by more than a stop's transfers (got " + maxDelta.toFixed(4) + ")");
+	assert(maxDelta <= Train.capacity(train) + Const.RATE_MAX * DT,
+		"no step after the change moved a yard by more than the consist's hold at a stop (got " + maxDelta.toFixed(4) + ")");
 }
 
 // the largest change to a single yard in one step

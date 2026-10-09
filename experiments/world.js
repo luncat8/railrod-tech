@@ -41,6 +41,7 @@ function testGenerationIsDeterministic() {
 	var a = World.generate(Rng.create(424242));
 	var b = World.generate(Rng.create(424242));
 
+	assert.deepStrictEqual(Array.from(a.terrain), Array.from(b.terrain));
 	assert.deepStrictEqual(Array.from(a.x), Array.from(b.x));
 	assert.deepStrictEqual(Array.from(a.kind), Array.from(b.kind));
 	assert.deepStrictEqual(Array.from(a.need), Array.from(b.need));
@@ -71,6 +72,11 @@ function testWorldShape() {
 	assert.strictEqual(world.need.length, n);
 	assert.strictEqual(world.rate.length, n);
 	assert.strictEqual(world.fragility.length, n);
+	assert.strictEqual(world.terrain.length, Const.TERRAIN_N);
+	for (i = 0; i < world.terrain.length; i += 1) {
+		assert(Number.isFinite(world.terrain[i]), "terrain height is finite");
+		assert(Math.abs(world.terrain[i]) <= Const.TERRAIN_RELIEF_M, "height stays within the relief scale");
+	}
 
 	for (i = 0; i < n; i += 1) {
 		inflows = 0;
@@ -94,6 +100,42 @@ function testWorldShape() {
 		}
 	}
 	assert(srcs >= 1 && cons >= 1, "world has both sources and consumers");
+}
+
+function testTerrainWrapsRendersAndCopies() {
+	var world = World.generate(Rng.create(73));
+	var copy = World.blank(world.nodeCount);
+	var flat = World.blank(1);
+	var view = { trackY: 400 };
+	var slopeLimit = Const.TERRAIN_SLOPE_MAX_DEG * Math.PI / 180;
+	var x;
+	var height;
+	var slope;
+
+	assert.strictEqual(World.terrainHeightAt(flat, 0), 0, "a blank heightmap starts flat");
+	assert.strictEqual(World.terrainSlopeAt(flat, 0), 0, "a flat heightmap has zero grade");
+	assert.strictEqual(Render.terrainColor(0), "#0e120f", "zero slope keeps the flat ground tone");
+	assert.notStrictEqual(Render.terrainColor(-slopeLimit), Render.terrainColor(slopeLimit),
+		"the restrained palette distinguishes downhill from uphill");
+	assert.strictEqual(Render.terrainColor(slopeLimit * 2), Render.terrainColor(slopeLimit),
+		"extreme slopes clamp to the end of the colormap");
+
+	for (x = -Const.RING_KM; x <= Const.RING_KM * 2; x += 0.37) {
+		height = World.terrainHeightAt(world, x);
+		slope = World.terrainSlopeAt(world, x);
+		assert(Math.abs(height - World.terrainHeightAt(world, x + Const.RING_KM)) < 1e-5,
+			"height repeats around the loop");
+		assert(Math.abs(slope - World.terrainSlopeAt(world, x + Const.RING_KM)) < 1e-7,
+			"slope repeats around the loop");
+		assert(Math.abs(Render.trackYAt(view, world, x)
+			- (view.trackY - height * Const.TERRAIN_Y_PX_PER_M)) < 1e-9,
+			"terrain height maps to canvas Y with the configured scale");
+	}
+	assert(Math.abs(World.terrainHeightAt(world, 0.001)
+		- World.terrainHeightAt(world, Const.RING_KM - 0.001)) < 0.1,
+		"the profile is smooth through the ring seam");
+	World.copyInto(copy, world);
+	assert.deepStrictEqual(Array.from(copy.terrain), Array.from(world.terrain), "world snapshots carry the terrain profile");
 }
 
 // the kinematics step is the only writer of train.x: it must stay wrapped and
@@ -170,11 +212,13 @@ function testHitNodeFindsNearestNode() {
 	};
 	var i;
 	var sx;
+	var sy;
 
-	// every node is hit at its own screen column, inside the vertical band
+	// every node is hit at its own screen column, inside the node's terrain-relative band
 	for (i = 0; i < world.nodeCount; i += 1) {
 		sx = Render.screenX(world.x[i], view.cameraX, view.pxPerKm, view.width, Const.RING_KM);
-		assert.strictEqual(Render.hitNode(view, sim, sx, view.trackY - 30), i, "node " + i + " is hit at its own column");
+		sy = Render.trackYAt(view, world, world.x[i]) - 30;
+		assert.strictEqual(Render.hitNode(view, sim, sx, sy), i, "node " + i + " is hit at its own column");
 	}
 	// above the band, and far off the track, nothing is hit
 	assert.strictEqual(Render.hitNode(view, sim, 600, view.trackY - 80), -1);
@@ -210,9 +254,10 @@ function testEveryResourceHasBothSides() {
 testSpacingAcrossSeeds();
 testGenerationIsDeterministic();
 testWorldShape();
+testTerrainWrapsRendersAndCopies();
 testTrainCrossesSeamWithoutJump();
 testEveryPositionHasACameraNearCopy();
 testCameraFollowsAcrossSeam();
 testHitNodeFindsNearestNode();
 testEveryResourceHasBothSides();
-console.log("World checks passed: 100-seed spacing, determinism, world shape, seam-continuous train and camera, node hit test, and every resource with an emitter and a buyer on 200 seeds.");
+console.log("World checks passed: 100-seed spacing, deterministic terrain and markets, terrain wrapping and rendering, world shape, seam-continuous train and camera, node hit test, and every resource with an emitter and a buyer on 200 seeds.");

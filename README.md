@@ -1,9 +1,9 @@
 # Railrod
 
 A small, file-friendly prototype of a dynamic railway economy. The game is being
-built in milestones; the current implementation is **0.1.9 — the air the gauge pays
-for**. The next milestone is tuning the hold economy and the world's legibility
-under it.
+built in milestones; the current implementation is **0.2.1 — grade-aware movement**.
+The heightmap now feeds the train's force balance; routing over multiple tracks is
+still future work.
 
 ## Run
 
@@ -41,6 +41,17 @@ x. It stops only where it can trade: it unloads into a consumer that needs its
 cargo and has room, or it loads from a source at a positive margin. Nothing else
 makes it stop. Each stop brakes into place and dwells for the transfers.
 
+The ring has a loop-seamless, 256-sample height profile in a flat typed array. Its
+gentle seeded relief moves the track, stations and train vertically at 0.34 px per
+metre; a restrained blue-green-to-ochre tint follows signed slope angle rather than
+altitude. The same grade now enters powered movement as a signed gravity load,
+`F_grade = M · TRAIN_G · sin(θ)`: uphill adds resistance and downhill assists the
+engine. Because traction and power must move the whole locomotive, wagons and cargo,
+heavier or weaker builds lose more speed on climbs; a larger engine can overcome a
+grade that stalls a smaller one. The build's `v_track` remains the speed ceiling.
+The wheel and engine acceleration curves use the live train's current grade, so the
+plots show the same hill the train is crossing.
+
 The train has an unbounded money balance, so the number to watch is
 **NET / S**: the trade profit per second, averaged over the window you chose, less
 the build's capex, amortised over `AMORT_S`. The footer shows `PROFIT / S`,
@@ -70,24 +81,29 @@ in extra time — dwell grows fast with the wagon *count* and slowly with the wa
 and simply counts against the hold while it does.
 
 The loading gauge is also the vehicle's cross-section, and air is paid for in
-cross-section: a train on 4.0 m track pushes 6.7× the frontal area of one on 0.6 m,
-so `F = c_rr·M·G + c_drag·area(g)·v³`. The track limit is nearly flat across the
-slider by comparison — the safe speed on a curve is the gauge against the height it
-carries, and a narrow train is narrow and low together. The two cross in the middle:
-below it a train reaches the speed it is allowed and is held down by its track, above
-it a train cannot reach the speed it is allowed and is held down by its own bulk.
-Both ends of the slider are therefore slower than the middle — a loaded 4-wagon lap
-takes 49.9 s on the narrowest gauge, 43.1 s at 2.30 m, and 49.4 s at 4.0 m — which
-is what makes the gauge a trade-off and not a ramp.
+cross-section: a train on 4.0 m track pushes 6.7× the frontal area of one on 0.6 m.
+Powered resistance includes rolling and grade loads plus frontal and skin drag:
+`F_res = c_rr·M·G + M·G·sin(θ) + c_drag·area(g)·v³ + c_skin·(loco + wagons)·v³`,
+with signed `θ` from the heightmap. Each added wagon adds the same skin-drag
+coefficient, while frontal drag stays fixed. The track limit is nearly flat across
+the gauge slider by comparison — the safe speed on a curve is the gauge against the
+height it carries, and a narrow train is narrow and low together. In the flat-track
+gauge check, the track and traction
+limits cross in the middle: below it a train reaches the speed it is allowed and is
+held down by its track; above it, its own bulk keeps it below the limit. Both ends
+are slower than the middle in that check — a loaded 4-wagon lap takes 49.9 s on the
+narrowest gauge, 43.4 s at 2.30 m, and 49.6 s at 4.0 m — making the gauge a
+trade-off, not a ramp. Terrain now adds a route-dependent grade to that baseline.
 
 Touch any build control and its **curve** opens above it: wagons against weight
-and load time, gauge against hold, mass and air, wheel against friction (acceleration
-and braking distance) and mass — with a second chart of acceleration against
-speed at your wheel and at both extremes — and engine against force and mass,
-where the power line `P / V` crosses the adhesion line at the point past which a
-bigger engine buys nothing. Every curve is the model the sim runs, sampled from
-`Tech` and `Train.accel` against the knob's whole range, with the marker on your
-build and its value in the legend.
+and load time, with a second chart for length-scaled skin drag; gauge against hold,
+mass and air; wheel against friction, acceleration and braking distance, with a
+second chart of acceleration over speed; and engine against force and mass, where
+`P / V` crosses the adhesion line, plus acceleration over speed for the current,
+smallest and largest engines. Gauge, wheel and engine mass curves include the
+current cargo load; wheel and engine acceleration curves also include the signed
+grade beneath the live train. Every curve is sampled from `Tech` and `Train.accel`
+across the knob's range, with the marker on your build and its value in the legend.
 
 ## The line and the bench
 
@@ -156,21 +172,20 @@ node experiments/gauge.js
 `harness.js` compares identical seeded state after 30,000 fixed steps at 1× and
 8×, then checks the step cap, dropped-time reporting, and seed reset.
 `world.js` regenerates 100 seeds and checks the minimum node spacing, generation
-determinism, world shape, seamless wrap rendering across the seam, and the node
-hit test.
+determinism, the 256-sample terrain profile and its height/slope wrap, snapshot
+copying, terrain-relative rendering and node hit test.
 `economy.js` unit-checks the price curves and the economy tick on its own: a full
 yard holds the floor price and accounts its overflow, a starved consumer stalls,
 a fed consumer drains at its rate, quotes stay inside the spread band, same-node
 round trips lose the spread, and stock is conserved.
 `train.js` checks the movement rules: the train never reverses, it stops exactly
-on a wanted node and passes every other node, a clean approach brakes at the
-service rate, a consumer placed inside the braking distance is still reached,
-dwell is the hold out and in at the build's transfer rate, a loaded wagon cannot
-be dropped,
-a knob change never moves the train in a step and never leaves it above the new
-track speed, the trip ledger counts forward only and a stop that moves nothing
-counts as nothing, a reset takes the build and the wagon count it is given, and the
-run is deterministic.
+on a wanted node and passes every other node, flat and graded track affect speed in
+the right direction, grade force scales with mass, a weak engine loses speed where
+a strong one climbs, a clean approach brakes at the service rate, a consumer inside
+the braking distance is still reached, frontal drag stays fixed while skin drag
+grows with consist length, dwell follows the transfer rate, a loaded wagon cannot
+be dropped, knob changes preserve the speed cap, the trip ledger counts forward,
+a reset takes its requested build, and the run is deterministic.
 `trade.js` checks the trade rules: the margin decides loading, only consumers
 that need a resource price it, unloading needs the recipe and room, cash is the
 sum of sequential quotes, a same-node round trip loses the spread, a source never
@@ -193,10 +208,11 @@ whole bench leaves the sim bit-identical and spends only its budget, capture fil
 and deduplicates and wraps, a clicked row is taken whole, and the mode is a toggle
 the seed and the market survive. `--report` prints a bench for a human, `--laps=n`
 and `--seeds=n` shrink a run while tuning the cutoffs.
-`plots.js` checks the four build curves: they are finite and bounded, they move
-in the directions the knob contract states, the engine's power line crosses its
-adhesion line on every seed, the marker's value is the one `Tech` and `Train`
-give for that build, and a plot is filled rather than rebuilt.
+`plots.js` checks the four build curves: they are finite and bounded, move in the
+knob contract's directions, and match `Tech` and `Train` at the live build; it also
+checks that wheel and engine acceleration curves include the train's current grade,
+that the engine's power crosses adhesion on every seed, and that curves are filled
+in place rather than rebuilt.
 `boot.js` boots the page against a stub DOM, loading the scripts in the order
 `index.html` lists them, and drives both run modes — MAX's flat step budget with
 no draws against the animated clock's speed range — the smoothing slider, the
