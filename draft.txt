@@ -1,0 +1,47 @@
+## game prototype of dynamic tech tree, railroad example
+
+make development plan based on this draft
+
+### game engine 
+
+1d map wrap-X, side view
+
+random resource generator: r1 r2 r3
+	min sell price (no demand, full stock), max sell price (zero stock)
+random consumer generator:
+	consume r1 or r1+r2, etc any combinations.
+	 also min and max price sell and buy depends of stock
+
+player build railway (1 line, 1 train)
+
+player set start and end waypoint and train move between them. train automatically buy and sell to optimal profit
+
+clean, simple visual, avoid sub-menu
+
+set number of wagons
+
+game speed slider
+
+show average profit per sec
+
+## dynamic tech
+
+player change 
+	track gauge distance
+	wheel diameter
+	engine size
+these has plot size (performance) vs mass (cost)
+
+next see how change profit per sec during simulation
+
+##deferred stages:
+
+realistic train speed and torque characteristics (similar to Railroad Tycoon 3, but not need real trains, just emergent and realistic)
+
+train consume some resource and have adjustable storage for it (buy automatically)
+
+competitor train(s) - use same line. trains can push each other or choose to move in other direction because map is wrap-X.
+
+improve path and tactics of bot.
+
+heightmap generator, improve tactics according to path-find using heightmap and speed and torque characteristics
