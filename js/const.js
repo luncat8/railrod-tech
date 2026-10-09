@@ -60,7 +60,9 @@
 		V0: 1.6,         // v_track = V0 * (0.7 + 0.6g) * (0.9 + 0.2d)
 		P0: 160,         // P       = P0 * pow(0.15 + 0.85e, 1.8)
 		C_RR0: 0.01,     // c_rr    = C_RR0 * (1.3 - 0.7d)
-		C_DRAG: 2.4,
+		// c_drag is per unit of frontal area: the air a build pushes is the area the
+		// loading gauge gives it, times this. see Tech.areaOf
+		C_DRAG: 8.4,
 		MU: 0.3,         // wheel/rail adhesion
 		DRIVE_SHARE: 0.65,
 		// scaled gravity: the visual band is 1-2 km/s, so adhesion and rolling

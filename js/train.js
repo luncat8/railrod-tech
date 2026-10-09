@@ -99,7 +99,7 @@
 		var build = train.build;
 		var mass = Train.mass(train);
 		var force = Math.min(build.fTrac, build.power / Math.max(v, C.V_EPS));
-		var resistance = build.cRR * mass * C.TRAIN_G + C.C_DRAG * v * v * v;
+		var resistance = build.cRR * mass * C.TRAIN_G + C.C_DRAG * build.dragArea * v * v * v;
 
 		return (force - resistance) / mass;
 	};

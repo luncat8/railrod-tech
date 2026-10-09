@@ -284,14 +284,17 @@ function testKnobChangeNeverTeleports() {
 	var prevV;
 	var step;
 	var i;
+	// the narrowest track the slider reaches: the train has to be above it, or the
+	// gauge change below is not a slower track and accelerates instead of braking
+	var narrow = Tech.vTrackOf(0, Const.KNOB_D);
 
 	simUntil(sim, function () {
-		return train.state === Train.CRUISE && train.v > 1.2;
+		return train.state === Train.CRUISE && train.v > narrow + 0.05;
 	});
 	before = train.x;
 	prevV = train.v;
 	// a gauge change slows the track: the train must brake down, not jump to the new speed
-	Sim.setKnob(sim, Tech.GAUGE, 0.05);
+	Sim.setKnob(sim, Tech.GAUGE, 0);
 	Sim.step(sim, DT);
 	step = World.wrap(train.x - before);
 	assert(step < 0.05, "the step after a knob change moves at most a few centimetres");

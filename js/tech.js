@@ -37,8 +37,22 @@
 		return C.M0 * (0.8 + 0.4 * g) + C.MW * d * d;
 	};
 
+	// A track limit, not a gift: the widest gauge is allowed the same speed it always
+	// was and the narrowest is allowed most of it, because the safe speed on a curve is
+	// the gauge against the height it carries, and a narrow train is narrow and low
+	// together. What the gauge actually buys is the hold, and what it costs is the air.
 	Tech.vTrackOf = function (g, d) {
-		return C.V0 * (0.7 + 0.6 * g) * (0.9 + 0.2 * d);
+		return C.V0 * (0.85 + 0.45 * g) * (0.9 + 0.2 * d);
+	};
+
+	// The loading gauge is the vehicle's cross-section, and air is paid for in
+	// cross-section: a train on 4.0 m track pushes 6.7x the frontal area of one on
+	// 0.6 m. Measured against the widest gauge, so area 1 is the most air a build can
+	// push and C_DRAG carries the units. This is the channel that makes the wide end
+	// heavy in a second way: past the middle of the slider a train stops being limited
+	// by its track and starts being limited by its own bulk.
+	Tech.areaOf = function (g) {
+		return Tech.gaugeM(g) / C.GAUGE_MAX_M;
 	};
 
 	Tech.powerOf = function (e) {
@@ -77,6 +91,7 @@
 		build.vTrack = Tech.vTrackOf(g, d);
 		build.power = Tech.powerOf(e);
 		build.cRR = Tech.cRROf(d);
+		build.dragArea = Tech.areaOf(g);
 		build.fTrac = Tech.fTracOf(e);
 		build.wagonHold = Tech.holdPerWagon(g);
 		build.transferRate = Tech.transferRateOf(g);

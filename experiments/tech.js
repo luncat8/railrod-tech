@@ -32,7 +32,7 @@ function testDefaultBuildMatchesThe013Consist() {
 
 	assert(Math.abs(build.mLoco - 40) < 1e-9, "loco mass at e = 0.5 is 40 t");
 	assert(Math.abs(build.mWagon - 21) < 1e-9, "wagon mass at g = d = 0.5 is 21 t");
-	assert(Math.abs(build.vTrack - 1.6) < 1e-9, "track speed at g = d = 0.5 is 1.6 km/s");
+	assert(Math.abs(build.vTrack - 1.72) < 1e-9, "track speed at g = d = 0.5 is 1.72 km/s");
 	assert(Math.abs(build.cRR - 0.0095) < 1e-9, "rolling resistance at d = 0.5 is 0.0095");
 	assert(Math.abs(build.fTrac - 46.8) < 1e-9, "traction limit at e = 0.5 is 46.8 km/s² · t");
 	assert(Math.abs(build.power - 160 * Math.pow(0.575, 1.8)) < 1e-9, "power at e = 0.5 follows the engine curve");
