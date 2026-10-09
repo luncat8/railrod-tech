@@ -31,6 +31,8 @@
 		return Economy.priceAt(world, i, r, world.stock[i * C.RES_N + r] + 0.5) * (1 - C.SPREAD);
 	};
 
+	// the price array is a readout cache for the HUD bars, not sim state: a headless
+	// run that never draws has no use for it, so the tick does not refresh it
 	Economy.refreshPrices = function (world) {
 		var n = world.nodeCount;
 		var res = C.RES_N;
@@ -88,16 +90,11 @@
 
 	Economy.tick = function (world, dt) {
 		var n = world.nodeCount;
-		var res = C.RES_N;
 		var i;
-		var r;
 
 		for (i = 0; i < n; i += 1) {
 			if (world.kind[i] === World.SRC) tickSource(world, i, dt);
 			else tickConsumer(world, i, dt);
-			for (r = 0; r < res; r += 1) {
-				world.price[i * res + r] = Economy.price(world, i, r);
-			}
 		}
 	};
 

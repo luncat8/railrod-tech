@@ -548,6 +548,15 @@ button {
 	font-size: 14px;
 }
 
+/* the measured optimum is a second-order readout: dimmer, same monospace */
+.telemetry-item--optimum .telemetry-label {
+	color: var(--subtle);
+}
+
+.telemetry-item--optimum strong {
+	color: var(--warm);
+}
+
 .telemetry-item strong small {
 	color: #718075;
 	font-size: 8px;
@@ -820,6 +829,7 @@ button {
 	}
 
 	.telemetry-item--dropped,
+	.telemetry-item--optimum,
 	.runtime-status {
 		display: none;
 	}

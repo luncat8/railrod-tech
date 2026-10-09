@@ -16,6 +16,8 @@
 	var netValue = null;
 	var profitValue = null;
 	var capexValue = null;
+	var optimumValue = null;
+	var optimumBuildValue = null;
 	var pauseButton = null;
 	var pauseIcon = null;
 	var pauseLabel = null;
@@ -34,6 +36,8 @@
 	var displayedNet = "";
 	var displayedProfit = "";
 	var displayedCapex = "";
+	var displayedOptimum = "";
+	var displayedOptimumBuild = "";
 
 	var RES_NAMES = ["R1", "R2", "R3"];
 
@@ -111,6 +115,8 @@
 		netValue = document.getElementById("net-value");
 		profitValue = document.getElementById("profit-value");
 		capexValue = document.getElementById("capex-value");
+		optimumValue = document.getElementById("optimum-value");
+		optimumBuildValue = document.getElementById("optimum-build");
 		pauseButton = document.getElementById("pause-button");
 		pauseIcon = document.getElementById("pause-icon");
 		pauseLabel = document.getElementById("pause-label");
@@ -183,7 +189,18 @@
 		return rounded.toFixed(2);
 	}
 
-	UI.updateTelemetry = function (fps, sim, clock) {
+	// which cell the ring is on; "PASS n%" while the first pass is still filling the grid
+	function optimumBuildText(sweep) {
+		var cell;
+
+		if (sweep.done < sweep.count) return "PASS " + Math.round(sweep.done * 100 / sweep.count) + "%";
+		cell = RR.Sweep.cellOf(sweep, sweep.best);
+		return RR.Sweep.knobAt(cell[0], RR.Const.SWEEP_G_N).toFixed(2)
+			+ " · " + RR.Sweep.knobAt(cell[1], RR.Const.SWEEP_D_N).toFixed(2)
+			+ " · " + RR.Sweep.knobAt(cell[2], RR.Const.SWEEP_E_N).toFixed(2);
+	}
+
+	UI.updateTelemetry = function (fps, sim, clock, sweep) {
 		var train = sim.trains[0];
 		var nextFps = fps < 1 ? -1 : Math.round(fps);
 		var nextTime = Math.round(sim.time * 10) / 10;
@@ -193,6 +210,9 @@
 		var nextNet = signedRate(sim.netRate);
 		var nextProfit = signedRate(sim.profitRate);
 		var nextCapex = signedRate(-sim.capexRate);
+		var measured = !!sweep && sweep.best >= 0;
+		var nextOptimum = measured ? signedRate(sweep.mean[sweep.best]) : "—";
+		var nextOptimumBuild = measured ? optimumBuildText(sweep) : "—";
 
 		if (nextFps !== displayedFps) {
 			fpsValue.textContent = nextFps < 0 ? "—" : String(nextFps);
@@ -229,6 +249,14 @@
 		if (nextCapex !== displayedCapex) {
 			capexValue.textContent = nextCapex;
 			displayedCapex = nextCapex;
+		}
+		if (nextOptimum !== displayedOptimum) {
+			optimumValue.textContent = nextOptimum;
+			displayedOptimum = nextOptimum;
+		}
+		if (nextOptimumBuild !== displayedOptimumBuild) {
+			optimumBuildValue.textContent = nextOptimumBuild;
+			displayedOptimumBuild = nextOptimumBuild;
 		}
 	};
 

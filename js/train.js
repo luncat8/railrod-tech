@@ -32,6 +32,11 @@
 		};
 	};
 
+	// the empty consist: what the performance panel plots against net rate
+	Train.tareMass = function (train) {
+		return train.build.mLoco + train.wagons * train.build.mWagon;
+	};
+
 	Train.mass = function (train) {
 		return train.build.mLoco + train.wagons * train.build.mWagon + train.cargoUnits * C.UNIT_T;
 	};

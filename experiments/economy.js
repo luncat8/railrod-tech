@@ -65,6 +65,7 @@ function testFullYardHoldsFloorPriceAndOverflows() {
 	world.overflow[idx] = 0;
 
 	Economy.tick(sim.world, DT);
+	Economy.refreshPrices(world);
 
 	assert.strictEqual(world.stock[idx], world.cap[idx], "a full yard stays pinned at capacity");
 	assert(
@@ -173,6 +174,7 @@ function testPriceBoundsAndMonotonicity() {
 		sim = Sim.create(BOUND_SEED_BASE + s);
 		world = sim.world;
 		for (step = 0; step < BOUND_STEPS; step += 1) Economy.tick(sim.world, DT);
+		Economy.refreshPrices(world);
 		for (i = 0; i < world.nodeCount; i += 1) {
 			for (r = 0; r < res; r += 1) {
 				idx = i * res + r;

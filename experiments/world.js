@@ -180,6 +180,32 @@ function testHitNodeFindsNearestNode() {
 	assert.strictEqual(Render.hitNode(view, sim, -5000, view.trackY), -1);
 }
 
+// every resource must have an emitter and a hungry yard, or a slice of the map is dead
+function testEveryResourceHasBothSides() {
+	var s;
+	var world;
+	var emits;
+	var wants;
+	var i;
+	var r;
+
+	for (s = 0; s < 200; s += 1) {
+		world = World.generate(Rng.create(90000 + s));
+		emits = [0, 0, 0];
+		wants = [0, 0, 0];
+		for (i = 0; i < world.nodeCount; i += 1) {
+			for (r = 0; r < Const.RES_N; r += 1) {
+				if (world.kind[i] === World.SRC && world.inflow[i * Const.RES_N + r] > 0) emits[r] += 1;
+				if (world.kind[i] === World.CON && (world.need[i] & (1 << r))) wants[r] += 1;
+			}
+		}
+		for (r = 0; r < Const.RES_N; r += 1) {
+			assert(emits[r] > 0, "seed " + (90000 + s) + " has an emitter of r" + (r + 1));
+			assert(wants[r] > 0, "seed " + (90000 + s) + " has a yard that buys r" + (r + 1));
+		}
+	}
+}
+
 testSpacingAcrossSeeds();
 testGenerationIsDeterministic();
 testWorldShape();
@@ -187,4 +213,5 @@ testTrainCrossesSeamWithoutJump();
 testEveryPositionHasACameraNearCopy();
 testCameraFollowsAcrossSeam();
 testHitNodeFindsNearestNode();
-console.log("World checks passed: 100-seed spacing, determinism, world shape, seam-continuous train and camera, node hit test.");
+testEveryResourceHasBothSides();
+console.log("World checks passed: 100-seed spacing, determinism, world shape, seam-continuous train and camera, node hit test, and every resource with an emitter and a buyer on 200 seeds.");

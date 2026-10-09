@@ -18,23 +18,7 @@ var MAX_STEPS = 60 * 900;
 // a hand-built ring, so every expected answer is known in advance
 function makeWorld(nodes) {
 	var n = nodes.length;
-	var world = {
-		nodeCount: n,
-		ringKm: Const.RING_KM,
-		x: new Float32Array(n),
-		kind: new Int8Array(n),
-		need: new Int8Array(n),
-		rate: new Float32Array(n),
-		fragility: new Float32Array(n),
-		stock: new Float64Array(n * Const.RES_N),
-		cap: new Float32Array(n * Const.RES_N),
-		inflow: new Float32Array(n * Const.RES_N),
-		base: new Float32Array(n * Const.RES_N),
-		price: new Float32Array(n * Const.RES_N),
-		consumed: new Float64Array(n * Const.RES_N),
-		produced: new Float64Array(n * Const.RES_N),
-		overflow: new Float64Array(n * Const.RES_N)
-	};
+	var world = World.blank(n);
 	var i;
 	var r;
 	var spec;

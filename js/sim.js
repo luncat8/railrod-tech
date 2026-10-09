@@ -18,7 +18,8 @@
 			cashSeen: 0,
 			profitRate: 0,
 			capexRate: 0,
-			netRate: 0
+			netRate: 0,
+			netMean: 0
 		};
 
 		Sim.reset(sim, value);
@@ -40,6 +41,7 @@
 		RR.Train.reset(sim.trains[0], sim.world);
 		sim.cashSeen = 0;
 		sim.profitRate = 0;
+		sim.netMean = 0;
 		Sim.refreshCapex(sim);
 	};
 
@@ -52,6 +54,7 @@
 		for (i = 0; i < trains.length; i += 1) capex += trains[i].capexRate;
 		sim.capexRate = capex;
 		sim.netRate = sim.profitRate - capex;
+		sim.netMean = sim.profitRate - capex;
 	};
 
 	Sim.setKnob = function (sim, slot, value) {
@@ -71,7 +74,9 @@
 		Sim.refreshCapex(sim);
 	};
 
-	// profit rate: EMA of the trains' cash flow per second, over PROFIT_TAU_S
+	// profit rate: EMA of the trains' cash flow per second, over PROFIT_TAU_S. Two
+	// windows on the same flow, because two readers want two things: the HUD's NET/S is
+	// a ticker that answers now, the longer one is a rate a swept dot can be compared to.
 	function updateProfit(sim, dt) {
 		var trains = sim.trains;
 		var cash = 0;
@@ -83,6 +88,7 @@
 		sim.cashSeen = cash;
 		sim.profitRate += (flow / dt - sim.profitRate) * (dt / C.PROFIT_TAU_S);
 		sim.netRate = sim.profitRate - sim.capexRate;
+		sim.netMean += (flow / dt - sim.capexRate - sim.netMean) * (dt / C.NET_MEAN_S);
 	}
 
 	Sim.step = function (sim, dt) {
@@ -93,6 +99,8 @@
 		sim.time = sim.steps * dt;
 		RR.Economy.tick(sim.world, dt);
 		for (i = 0; i < trains.length; i += 1) RR.Train.step(trains[i], sim.world, dt);
+		// after the transfers, so a frame never shows a yard one step behind its cargo
+		RR.Economy.refreshPrices(sim.world);
 		updateProfit(sim, dt);
 	};
 

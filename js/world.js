@@ -32,21 +32,40 @@
 		}
 	}
 
+	// a ring missing one side of the market has dead cargo or nothing to sell into, so
+	// both kinds are floored at one node per resource before the random pass is kept
 	function assignKinds(rng, kind) {
+		var res = C.RES_N;
+		var n = C.NODE_N;
 		var srcs = 0;
+		var cons;
 		var i;
 
-		for (i = 0; i < C.NODE_N; i += 1) {
+		for (i = 0; i < n; i += 1) {
 			kind[i] = Rng.nextFloat(rng) < 0.5 ? World.SRC : World.CON;
 			if (kind[i] === World.SRC) srcs += 1;
 		}
-		if (srcs === 0) kind[0] = World.SRC;
-		else if (srcs === C.NODE_N) kind[C.NODE_N - 1] = World.CON;
+		cons = n - srcs;
+		for (i = n - 1; i >= 0 && srcs < res; i -= 1) {
+			if (kind[i] !== World.CON) continue;
+			kind[i] = World.SRC;
+			srcs += 1;
+			cons -= 1;
+		}
+		for (i = 0; i < n && cons < res; i += 1) {
+			if (kind[i] !== World.SRC) continue;
+			kind[i] = World.CON;
+			srcs -= 1;
+			cons += 1;
+		}
 	}
 
-	function fillSource(rng, world, i) {
+	// sources hand out their resource in turn, so every resource has roughly the same
+	// number of emitters: a seed then decides where the cargo is and what it is worth,
+	// not whether a market for it exists at all
+	function fillSource(rng, world, i, ordinal) {
 		var res = C.RES_N;
-		var emitted = Math.floor(Rng.nextFloat(rng) * res);
+		var emitted = ordinal % res;
 		var j;
 		var cap;
 		var base;
@@ -62,9 +81,11 @@
 		world.stock[i * res + emitted] = world.cap[i * res + emitted] * (C.SRC_STOCK_MIN + Rng.nextFloat(rng) * (C.SRC_STOCK_MAX - C.SRC_STOCK_MIN));
 	}
 
-	function fillConsumer(rng, world, i) {
+	// yards hunger for the resources in turn as well, for the same reason, and may take
+	// a second input on top
+	function fillConsumer(rng, world, i, ordinal) {
 		var res = C.RES_N;
-		var first = Math.floor(Rng.nextFloat(rng) * res);
+		var first = ordinal % res;
 		var second = (first + 1 + Math.floor(Rng.nextFloat(rng) * (res - 1))) % res;
 		var twoBits = Rng.nextFloat(rng) < 0.5;
 		var mask = (1 << first) | (twoBits ? 1 << second : 0);
@@ -86,10 +107,12 @@
 		}
 	}
 
-	World.generate = function (rng) {
-		var n = C.NODE_N;
+	// the flat arrays of a ring, in one place so a headless fixture and the
+	// generated world are always the same shape
+	World.blank = function (n) {
 		var res = C.RES_N;
-		var world = {
+
+		return {
 			nodeCount: n,
 			ringKm: C.RING_KM,
 			x: new Float32Array(n),
@@ -108,6 +131,30 @@
 			produced: new Float64Array(n * res),
 			overflow: new Float64Array(n * res)
 		};
+	};
+
+	// one array per field: dst ends up holding the same world, in its own memory
+	World.copyInto = function (dst, src) {
+		dst.x.set(src.x);
+		dst.kind.set(src.kind);
+		dst.need.set(src.need);
+		dst.rate.set(src.rate);
+		dst.fragility.set(src.fragility);
+		dst.stock.set(src.stock);
+		dst.cap.set(src.cap);
+		dst.inflow.set(src.inflow);
+		dst.base.set(src.base);
+		dst.price.set(src.price);
+		dst.consumed.set(src.consumed);
+		dst.produced.set(src.produced);
+		dst.overflow.set(src.overflow);
+	};
+
+	World.generate = function (rng) {
+		var n = C.NODE_N;
+		var world = World.blank(n);
+		var srcs = 0;
+		var cons = 0;
 		var i;
 
 		placeNodes(rng, world.x);
@@ -115,8 +162,8 @@
 
 		for (i = 0; i < n; i += 1) {
 			world.fragility[i] = C.K_MIN + Rng.nextFloat(rng) * (C.K_MAX - C.K_MIN);
-			if (world.kind[i] === World.SRC) fillSource(rng, world, i);
-			else fillConsumer(rng, world, i);
+			if (world.kind[i] === World.SRC) fillSource(rng, world, i, srcs++);
+			else fillConsumer(rng, world, i, cons++);
 		}
 
 		return world;

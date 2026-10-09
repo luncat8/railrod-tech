@@ -18,7 +18,7 @@
 					<strong>RAILROD</strong>
 					<span>RAIL ECONOMY / LOOP TRADE</span>
 				</div>
-				<div class="build-badge"><span></span>PROTOTYPE 0.1.4</div>
+				<div class="build-badge"><span></span>PROTOTYPE 0.1.5</div>
 			</div>
 
 			<div class="runtime-controls">
@@ -54,9 +54,9 @@
 			<div id="node-label" class="node-label" hidden></div>
 			<div class="stage-content">
 				<section class="intro" aria-labelledby="intro-title">
-					<div class="eyebrow"><span class="eyebrow-mark"></span>PHASE 01 <span class="eyebrow-slash">/</span> ONE-WAY LOOP</div>
+					<div class="eyebrow"><span class="eyebrow-mark"></span>PHASE 01 <span class="eyebrow-slash">/</span> OPTIMUM EMERGENCE</div>
 					<h1 id="intro-title">The train never<br>turns <em>back.</em></h1>
-					<p class="intro-copy">A seeded ring of fourteen nodes wraps 64 km of track. The train runs one way round it and stops only where it can trade: unloading into a consumer that needs its cargo, or loading from a source at a margin. Money is not limited, so the number to watch is NET/S — trade profit per second less the build's capex, amortised. Change the gauge, wheel, engine and wagons and watch it move.</p>
+					<p class="intro-copy">A seeded ring of fourteen nodes wraps 64 km of track. The train runs one way round it and stops only where it can trade: unloading into a consumer that needs its cargo, or loading from a source at a margin. Money is not limited, so the number to watch is NET/S — trade profit per second less the build's capex, amortised. The panel top right re-runs the loop headlessly over a 9 × 9 × 3 grid of gauge, wheel and engine: every dot is a build measured in the sim, the crosshair is yours. Slide a knob and see how far off the measured optimum you sit.</p>
 
 					<div class="capabilities" aria-label="Runtime capabilities">
 						<div class="capability">
@@ -76,16 +76,16 @@
 						</div>
 						<div class="capability">
 							<span class="capability-index">04</span>
-							<span class="capability-label">MOVEMENT</span>
-							<strong>ONE WAY</strong>
+							<span class="capability-label">BUILD SWEEP</span>
+							<strong>9 × 9 × 3</strong>
 						</div>
 					</div>
 				</section>
 
 				<aside class="next-step" aria-label="Next milestone">
 					<span class="next-step-label">UP NEXT</span>
-					<strong>Optimum emergence</strong>
-					<span class="next-step-meta">MILESTONE 0.1.5 <span>↗</span></span>
+					<strong>World legibility</strong>
+					<span class="next-step-meta">MILESTONE 0.1.6 <span>↗</span></span>
 				</aside>
 			</div>
 		</main>
@@ -135,6 +135,14 @@
 					<span class="telemetry-label">CAPEX / S</span>
 					<strong><span id="capex-value">-0.00</span><small> CR/S</small></strong>
 				</div>
+				<div class="telemetry-item telemetry-item--optimum">
+					<span class="telemetry-label">OPTIMUM / S</span>
+					<strong><span id="optimum-value">—</span><small> CR/S</small></strong>
+				</div>
+				<div class="telemetry-item telemetry-item--optimum">
+					<span class="telemetry-label">OPTIMUM BUILD G·D·E</span>
+					<strong id="optimum-build">—</strong>
+				</div>
 				<div class="telemetry-item">
 					<span class="telemetry-label">TRAIN SPEED</span>
 					<strong><span id="train-speed-value">0.00</span><small> KM/S</small></strong>
@@ -178,6 +186,7 @@
 	<script src="./js/trade.js"></script>
 	<script src="./js/train.js"></script>
 	<script src="./js/sim.js"></script>
+	<script src="./js/sweep.js"></script>
 	<script src="./js/clock.js"></script>
 	<script src="./js/render.js"></script>
 	<script src="./js/ui.js"></script>

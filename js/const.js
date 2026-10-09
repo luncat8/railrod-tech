@@ -24,14 +24,14 @@
 		SRC_BASE_MAX: 14,
 		CON_BASE_MIN: 18,
 		CON_BASE_MAX: 36,
-		INFLOW_MIN: 0.04,
-		INFLOW_MAX: 0.12,
-		RATE_MIN: 0.02,
-		RATE_MAX: 0.08,
-		CAP_MIN: 60,
-		CAP_MAX: 140,
-		CON_CAP_MIN: 40,
-		CON_CAP_MAX: 100,
+		INFLOW_MIN: 0.1,
+		INFLOW_MAX: 0.3,
+		RATE_MIN: 0.08,
+		RATE_MAX: 0.32,
+		CAP_MIN: 16,
+		CAP_MAX: 40,
+		CON_CAP_MIN: 10,
+		CON_CAP_MAX: 28,
 		SRC_STOCK_MIN: 0.3,
 		SRC_STOCK_MAX: 0.6,
 		CON_STOCK_MIN: 0.05,
@@ -74,6 +74,7 @@
 		STOP_EPS_KM: 0.01, // the node just left counts as behind until the train is this far clear
 		// money: unbounded, so only rates count. capex is amortised, not charged
 		PROFIT_TAU_S: 60,  // about one loop: shorter windows read the lumps of trade, not the rate
+		NET_MEAN_S: 600,   // the rate window a swept dot is worth comparing against
 		AMORT_S: 1200,     // horizon over which the build's value is recovered, s
 		K_TRACK: 10,       // track cr/km at g = 0
 		CW: 60,            // wagon cr at g = d = 0
@@ -82,6 +83,17 @@
 		GAUGE_MAX_M: 4.0,
 		WHEEL_MIN_M: 0.4,  // readouts only: wheel = 0.4 + 1.2d m
 		WHEEL_MAX_M: 1.6,
+
+		// build sweep: the measured grid behind the performance panel
+		SWEEP_G_N: 9,
+		SWEEP_D_N: 9,
+		SWEEP_E_N: 3,
+		SWEEP_STRIDE: 122,         // coprime with 9*9*3, so a pass scatters over the panel
+		SWEEP_MIN_S: 150,          // a sample is at least this long and ends with the train empty
+		SWEEP_MAX_S: 600,          // and if it never gets there, this cutoff prices it as dead weight
+		SWEEP_EMA: 0.4,            // weight of a new pass in a dot's running average
+		SWEEP_BUDGET_STEPS: 4000,  // sweep sim steps per frame, the price of the panel
+		SWEEP_REFRESH_S: 1200,     // one market cycle: the next pass samples another phase of it
 
 		// camera / view
 		CAMERA_FOLLOW: 2.5,

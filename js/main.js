@@ -5,6 +5,7 @@
 	var sim = null;
 	var clock = null;
 	var view = null;
+	var sweep = null;
 	var speed = RR.Const.DEFAULT_SPEED;
 	var paused = false;
 	var lastTimestamp = null;
@@ -48,9 +49,15 @@
 		if (elapsed > RR.Const.MAX_FRAME_SECONDS) elapsed = RR.Const.MAX_FRAME_SECONDS;
 
 		if (paused) clock.lastSteps = 0;
-		else RR.Clock.advance(clock, elapsed, speed, RR.Sim.step, sim);
+		else {
+			RR.Clock.advance(clock, elapsed, speed, RR.Sim.step, sim);
+			// the sweep runs on its own copy of the world, so it never delays the sim;
+			// a finished pass is only re-run once the market has gone through a cycle
+			if (!sweep.running && sim.time - sweep.armedAt >= RR.Const.SWEEP_REFRESH_S) RR.Sweep.arm(sweep, sim, false);
+			RR.Sweep.step(sweep, RR.Const.SWEEP_BUDGET_STEPS);
+		}
 
-		RR.Render.draw(view, sim, paused, elapsed);
+		RR.Render.draw(view, sim, paused, elapsed, sweep);
 		framesInWindow += 1;
 
 		if (fpsInterval >= RR.Const.FPS_WINDOW_MS) {
@@ -60,7 +67,7 @@
 		}
 
 		if (timestamp - telemetryTimestamp >= RR.Const.TELEMETRY_INTERVAL_MS) {
-			RR.UI.updateTelemetry(measuredFps, sim, clock);
+			RR.UI.updateTelemetry(measuredFps, sim, clock, sweep);
 			telemetryTimestamp = timestamp;
 		}
 
@@ -71,12 +78,14 @@
 		sim = RR.Sim.create(RR.Const.DEFAULT_SEED);
 		clock = RR.Clock.create();
 		view = RR.Render.create(document.getElementById("c"));
+		sweep = RR.Sweep.create();
+		RR.Sweep.arm(sweep, sim, true);
 		RR.UI.bind(Main, sim, speed);
 		root.addEventListener("resize", onResize);
 		view.canvas.addEventListener("mousemove", onMouseMove);
 		view.canvas.addEventListener("mouseleave", onMouseLeave);
 		onResize();
-		RR.Render.draw(view, sim, paused, 0);
+		RR.Render.draw(view, sim, paused, 0, sweep);
 		root.requestAnimationFrame(frame);
 	};
 
@@ -84,10 +93,11 @@
 		if (!sim) return;
 		RR.Sim.reset(sim, seed);
 		RR.Clock.reset(clock);
+		RR.Sweep.arm(sweep, sim, true);
 		RR.Render.snapCamera(view, sim);
 		RR.UI.setSeed(sim.seed);
 		RR.UI.setBuild(sim);
-		RR.UI.updateTelemetry(measuredFps, sim, clock);
+		RR.UI.updateTelemetry(measuredFps, sim, clock, sweep);
 	};
 
 	Main.newSeed = function () {
@@ -106,11 +116,14 @@
 		Main.setSeed(seed);
 	};
 
+	// wagons change every sample in the grid, so the pass restarts; the three build
+	// knobs do not, and the panel keeps its dots while the player drags them
 	Main.setWagons = function (value) {
 		if (!sim || !Number.isFinite(value)) return;
 		RR.Sim.setWagons(sim, value);
+		RR.Sweep.arm(sweep, sim, true);
 		RR.UI.setBuild(sim);
-		RR.UI.updateTelemetry(measuredFps, sim, clock);
+		RR.UI.updateTelemetry(measuredFps, sim, clock, sweep);
 	};
 
 	// slot is a Tech knob index (GAUGE, WHEEL, ENGINE); the build changes at once
@@ -118,7 +131,7 @@
 		if (!sim || !Number.isFinite(value)) return;
 		RR.Sim.setKnob(sim, slot, value);
 		RR.UI.setBuild(sim);
-		RR.UI.updateTelemetry(measuredFps, sim, clock);
+		RR.UI.updateTelemetry(measuredFps, sim, clock, sweep);
 	};
 
 	Main.setSpeed = function (value) {

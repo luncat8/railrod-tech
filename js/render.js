@@ -16,6 +16,12 @@
 	var TRAIN_DIM = "rgba(169, 214, 142, 0.35)";
 	var TRAIN_RAIL = "rgba(169, 214, 142, 0.22)";
 	var TICK = "#e8eee6";
+	var PANEL_BG = "rgba(14, 18, 15, 0.86)";
+	var PANEL_LINE = "rgba(183, 198, 183, 0.16)";
+	var PANEL_TEXT = "#718075";
+	var DOT = "rgba(169, 214, 142, 0.34)";
+	var DOT_BEST = "#c0e9a6";
+	var GAP = "rgba(217, 185, 120, 0.5)";
 
 	var BAR_W = 4;
 	var BAR_STEP = 5;
@@ -231,7 +237,121 @@
 		if (train.state === RR.Train.DWELL) drawDwell(view, train, sx);
 	}
 
-	Render.draw = function (view, sim, paused, frameDt) {
+	// ---- performance panel: measured net rate against train mass, from the sweep ----
+
+	var PANEL_W = 176;
+	var PANEL_H = 138;
+	var PANEL_MARGIN = 14;
+	var PANEL_IN = 13;
+	var PANEL_HEAD = 18;
+	var DOT_SIZE = 3;
+
+	// one object, filled each frame: the draw path allocates nothing
+	var panel = { x: 0, y: 0, w: 0, h: 0 };
+
+	function panelBox(view) {
+		panel.x = Math.max(PANEL_MARGIN, view.width - PANEL_MARGIN - PANEL_W);
+		panel.y = PANEL_MARGIN;
+		panel.w = Math.min(PANEL_W, view.width - 2 * PANEL_MARGIN);
+		panel.h = PANEL_H;
+		return panel;
+	}
+
+	function drawPanelFrame(view, box) {
+		var context = view.context;
+
+		context.fillStyle = PANEL_BG;
+		context.fillRect(box.x, box.y, box.w, box.h);
+		context.strokeStyle = PANEL_LINE;
+		context.lineWidth = 1;
+		context.strokeRect(box.x + 0.5, box.y + 0.5, box.w - 1, box.h - 1);
+		context.fillStyle = PANEL_TEXT;
+		context.font = "8px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+		context.textBaseline = "middle";
+		context.fillText("MEASURED NET / S", box.x + PANEL_IN, box.y + 10);
+		context.fillText("MASS", box.x + box.w - PANEL_IN - 26, box.y + box.h - 7);
+	}
+
+	// the sweep's dots, the best one ringed, the live build as a crosshair, and the
+	// gap between the crosshair and the dot it should sit on
+	function drawPanel(view, sim, sweep) {
+		var context = view.context;
+		var box;
+		var plotX;
+		var plotY;
+		var plotW;
+		var plotH;
+		var midY;
+		var massSpan;
+		var scale;
+		var i;
+		var x;
+		var y;
+		var liveX;
+		var liveY;
+		var near;
+
+		if (!sweep || sweep.massHi <= sweep.massLo) return;
+
+		box = panelBox(view);
+		plotX = box.x + PANEL_IN;
+		plotY = box.y + PANEL_HEAD;
+		plotW = box.w - 2 * PANEL_IN;
+		plotH = box.h - PANEL_HEAD - PANEL_IN;
+		midY = plotY + plotH * 0.5;
+		massSpan = sweep.massHi - sweep.massLo;
+		scale = plotH * 0.5 / sweep.yScale;
+
+		drawPanelFrame(view, box);
+
+		context.strokeStyle = PANEL_LINE;
+		context.beginPath();
+		context.moveTo(plotX, midY + 0.5);
+		context.lineTo(plotX + plotW, midY + 0.5);
+		context.stroke();
+
+		for (i = 0; i < sweep.count; i += 1) {
+			if (!sweep.mark[i]) continue;
+			x = plotX + (sweep.mass[i] - sweep.massLo) / massSpan * plotW;
+			y = midY - sweep.mean[i] * scale;
+			context.fillStyle = i === sweep.best ? DOT_BEST : DOT;
+			context.fillRect(x - DOT_SIZE * 0.5, y - DOT_SIZE * 0.5, DOT_SIZE, DOT_SIZE);
+		}
+
+		if (sweep.best >= 0 && sweep.mark[sweep.best]) {
+			x = plotX + (sweep.mass[sweep.best] - sweep.massLo) / massSpan * plotW;
+			y = midY - sweep.mean[sweep.best] * scale;
+			context.strokeStyle = DOT_BEST;
+			context.strokeRect(x - 4.5, y - 4.5, 9, 9);
+		}
+
+		liveX = plotX + (RR.Train.tareMass(sim.trains[0]) - sweep.massLo) / massSpan * plotW;
+		liveY = midY - sim.netMean * scale;
+		if (liveY < plotY - 3) liveY = plotY - 3;
+		else if (liveY > plotY + plotH + 3) liveY = plotY + plotH + 3;
+
+		near = RR.Sweep.comboFor(sweep, sim.knobs);
+		if (sweep.mark[near]) {
+			context.strokeStyle = GAP;
+			context.beginPath();
+			context.moveTo(liveX, liveY);
+			context.lineTo(liveX, midY - sweep.mean[near] * scale);
+			context.stroke();
+		}
+
+		context.strokeStyle = DOT_BEST;
+		context.beginPath();
+		context.moveTo(liveX - 5, liveY);
+		context.lineTo(liveX + 5, liveY);
+		context.moveTo(liveX, liveY - 5);
+		context.lineTo(liveX, liveY + 5);
+		context.stroke();
+
+		context.fillStyle = PANEL_LINE;
+		context.fillRect(plotX, box.y + box.h - 4, plotW * (sweep.done / sweep.count), 2);
+	}
+
+	Render.draw = function (view, sim, paused, frameDt, sweep) {
 		var context = view.context;
 		var width = view.width;
 		var height = view.height;
@@ -256,6 +376,7 @@
 
 		for (i = 0; i < world.nodeCount; i += 1) drawNode(view, sim, i);
 		drawTrain(view, sim, paused);
+		drawPanel(view, sim, sweep);
 	};
 
 	RR.Render = Render;

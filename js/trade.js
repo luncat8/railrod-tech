@@ -7,24 +7,37 @@
 	var Economy = RR.Economy;
 	var Trade = RR.Trade || {};
 
-	// a consumer wants one unit of r when its recipe takes r and its yard has room for it
+	// a consumer buys a resource while its recipe takes it, its yard has room, and it is
+	// not already the abundant half of the recipe. A half-fed yard goes on taking the
+	// input it lacks and refuses the one it is drowning in, so an unbalanced trader
+	// starves visibly instead of piling up cargo nobody will ever eat
 	Trade.wantsUnload = function (world, i, r) {
-		var idx = i * C.RES_N + r;
+		var res = C.RES_N;
+		var idx = i * res + r;
+		var mask = world.need[i];
+		var stock = world.stock;
+		var scarce = Infinity;
+		var j;
 
 		if (world.kind[i] !== World.CON) return false;
-		if (!(world.need[i] & (1 << r))) return false;
-		return world.stock[idx] <= world.cap[idx] - 1;
+		if (!(mask & (1 << r))) return false;
+		if (stock[idx] > world.cap[idx] - 1) return false;
+		for (j = 0; j < res; j += 1) {
+			if ((mask & (1 << j)) && stock[i * res + j] < scarce) scarce = stock[i * res + j];
+		}
+		return stock[idx] <= scarce + 1;
 	};
 
-	// highest price a consumer pays for r right now; room is ignored on purpose,
-	// since a full consumer drains and will have room by the time the train arrives
+	// the best price the train can realise right now. A consumer counts only while it
+	// would accept the unit: quoting a full yard is how the loop ends up carrying
+	// cargo nobody can take, and a full wagon that cannot be emptied stops the train
 	Trade.bestSell = function (world, r) {
 		var best = 0;
 		var i;
 		var quote;
 
 		for (i = 0; i < world.nodeCount; i += 1) {
-			if (world.kind[i] !== World.CON || !(world.need[i] & (1 << r))) continue;
+			if (!Trade.wantsUnload(world, i, r)) continue;
 			quote = Economy.sellQuote(world, i, r);
 			if (quote > best) best = quote;
 		}

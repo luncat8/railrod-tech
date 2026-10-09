@@ -4,6 +4,7 @@
 // headlessly, then exercise hover, pause, speed, seed, and build controls.
 
 var assert = require("assert");
+var fs = require("fs");
 
 function fakeContext() {
 	var target = {};
@@ -78,18 +79,17 @@ globalThis.devicePixelRatio = 2;
 globalThis.innerWidth = 1280;
 globalThis.innerHeight = 800;
 
-require("../js/rng.js");
-require("../js/const.js");
-require("../js/world.js");
-require("../js/economy.js");
-require("../js/tech.js");
-require("../js/trade.js");
-require("../js/train.js");
-require("../js/sim.js");
-require("../js/clock.js");
-require("../js/render.js");
-require("../js/ui.js");
-var Main = require("../js/main.js"); // boots on require: document is defined
+// the script order is read out of index.html rather than repeated here, so a module the
+// page forgets to load — or loads in an order that breaks it — fails here first
+var scripts = [];
+var tag = /<script src="\.\/(js\/[^"]+)"><\/script>/g;
+var found;
+
+while ((found = tag.exec(fs.readFileSync(__dirname + "/../index.html", "utf8"))) !== null) scripts.push(found[1]);
+assert(scripts.length >= 12, "index.html lists the scripts: " + scripts.length);
+assert.strictEqual(scripts[scripts.length - 1], "js/main.js", "main.js loads last, onto a complete RR");
+scripts.forEach(function (file) { require("../" + file); });
+var Main = globalThis.RR.Main; // main.js booted on require: document was defined
 
 var canvas = elements["c"];
 var label = elements["node-label"];
@@ -201,9 +201,13 @@ net = elements["net-value"].textContent;
 assert(/^[+-]?\d+\.\d\d$/.test(net), "net still reads as a signed rate after running");
 assert(Number(elements["train-speed-value"].textContent) >= 0, "train speed telemetry reads out");
 
+// the sweep panel is part of the page, not an extra: its readouts have to be filled in
+assert(/^[+-]?\d+\.\d\d$/.test(elements["optimum-value"].textContent), "the measured optimum reads as a signed rate");
+assert(/^\d\.\d\d · \d\.\d\d · \d\.\d\d$/.test(elements["optimum-build"].textContent) || /^PASS \d+%$/.test(elements["optimum-build"].textContent), "and names a grid cell of the sweep");
+
 // a parked train at seed reset reads zero speed on the first telemetry tick
 Main.setSeed(424242);
 frame();
 assert.strictEqual(elements["train-speed-value"].textContent, "0.00", "a train parked at the source reads zero speed");
 
-console.log("Boot checks passed: page boots headless, frames tick the economy, hover label, click routing removed, wagons and knob sliders respond, capex and cargo telemetry update, the loop trades.");
+console.log("Boot checks passed: page boots headless from the script list in index.html, frames tick the economy, hover label, wagons and knob sliders respond, capex, cargo and the sweep's optimum readout update, the loop trades.");
