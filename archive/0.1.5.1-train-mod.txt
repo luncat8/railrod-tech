@@ -1,0 +1,14 @@
+## speed and animation
+by default max speed mode without animation (just calculation and show profit stat, ema average, color code delta increase, decrease. slider to adj smooth factor), 
+checkbox animation mode (with speed 2x...30x, current 1x is too slow)
+
+
+## improve train modification and uix
+
+user start adjust WAGONS - show him plot wagons num vs weight and load/unload time (implement if not yet)
+
+user start adjust GAUGE - show him plot GAUGE vs cargo hold and mass
+
+user start adjust WHEEL - show him plot WHEEL vs friction (acceleration, brake) and mass. also acceleration limited by engine and mass - better to plot curves for it.
+
+user start adjust ENGINE - show him plot force vs mass
