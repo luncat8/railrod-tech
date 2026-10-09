@@ -19,7 +19,16 @@
 			profitRate: 0,
 			capexRate: 0,
 			netRate: 0,
-			netMean: 0
+			netTrend: 0,
+			netSlow: 0,
+			netMean: 0,
+			// the smoothing window the player reads: one flow, three windows on it
+			smoothS: C.SMOOTH_DEFAULT_S,
+			history: new Float64Array(C.HISTORY_N),
+			historyStep: C.SMOOTH_DEFAULT_S / C.HISTORY_DIV,
+			historyClock: 0,
+			historyCount: 0,
+			historyHead: 0
 		};
 
 		Sim.reset(sim, value);
@@ -42,7 +51,12 @@
 		sim.cashSeen = 0;
 		sim.profitRate = 0;
 		sim.netMean = 0;
+		sim.netTrend = 0;
 		Sim.refreshCapex(sim);
+		sim.history.fill(0);
+		sim.historyCount = 0;
+		sim.historyHead = 0;
+		sim.historyClock = 0;
 	};
 
 	// capex is amortised, so only a build change moves it; never per step
@@ -55,6 +69,9 @@
 		sim.capexRate = capex;
 		sim.netRate = sim.profitRate - capex;
 		sim.netMean = sim.profitRate - capex;
+		// the slow window is re-anchored too, so a rebuild is not read as a trend
+		sim.netSlow = sim.profitRate - capex;
+		sim.netTrend = 0;
 	};
 
 	Sim.setKnob = function (sim, slot, value) {
@@ -74,22 +91,54 @@
 		Sim.refreshCapex(sim);
 	};
 
-	// profit rate: EMA of the trains' cash flow per second, over PROFIT_TAU_S. Two
-	// windows on the same flow, because two readers want two things: the HUD's NET/S is
-	// a ticker that answers now, the longer one is a rate a swept dot can be compared to.
+	// Three windows on one flow, because three readers want three things: NET/S is the
+	// ticker the player set the smoothing of, the slow one behind it says whether the
+	// ticker is climbing or falling, and the long one is a rate a swept dot can be
+	// compared to. The first two follow the smoothing slider, the last one does not.
 	function updateProfit(sim, dt) {
 		var trains = sim.trains;
 		var cash = 0;
-		var flow;
+		var rate;
 		var i;
 
 		for (i = 0; i < trains.length; i += 1) cash += trains[i].cash;
-		flow = cash - sim.cashSeen;
+		rate = (cash - sim.cashSeen) / dt;
 		sim.cashSeen = cash;
-		sim.profitRate += (flow / dt - sim.profitRate) * (dt / C.PROFIT_TAU_S);
+		sim.profitRate += (rate - sim.profitRate) * (dt / sim.smoothS);
 		sim.netRate = sim.profitRate - sim.capexRate;
-		sim.netMean += (flow / dt - sim.capexRate - sim.netMean) * (dt / C.NET_MEAN_S);
+		sim.netSlow += (rate - sim.capexRate - sim.netSlow) * (dt / (sim.smoothS * C.TREND_SLOW));
+		sim.netTrend = sim.netRate - sim.netSlow;
+		sim.netMean += (rate - sim.capexRate - sim.netMean) * (dt / C.NET_MEAN_S);
+		Sim.sampleHistory(sim, dt);
 	}
+
+	// one sparkline sample per historyStep sim seconds. the caller sets that step, so a
+	// 50 s frame in MAX mode cannot flood a window meant to hold hours of trade
+	Sim.sampleHistory = function (sim, dt) {
+		sim.historyClock += dt;
+		if (sim.historyClock < sim.historyStep) return;
+
+		sim.historyClock = 0;
+		sim.history[sim.historyHead] = sim.netRate;
+		sim.historyHead = (sim.historyHead + 1) % C.HISTORY_N;
+		if (sim.historyCount < C.HISTORY_N) sim.historyCount += 1;
+	};
+
+	// The caller owns the clock and reports how much sim time its last frame was. The
+	// sparkline follows the smoothing the player chose, but a frame this big must not
+	// flood a window meant to hold hours of trade.
+	Sim.setFrameSeconds = function (sim, seconds) {
+		sim.historyStep = Math.max(sim.smoothS / C.HISTORY_DIV, seconds / C.HISTORY_PER_FRAME);
+	};
+
+	// the smoothing window is the player's: it sets how lumpy NET/S is allowed to be,
+	// and the trend window and the sparkline step follow it
+	Sim.setSmooth = function (sim, seconds) {
+		if (!Number.isFinite(seconds)) return;
+		sim.smoothS = Math.max(C.SMOOTH_MIN_S, Math.min(C.SMOOTH_MAX_S, seconds));
+		sim.historyStep = sim.smoothS / C.HISTORY_DIV;
+	};
+
 
 	Sim.step = function (sim, dt) {
 		var trains = sim.trains;

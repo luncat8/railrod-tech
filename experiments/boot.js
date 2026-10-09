@@ -25,6 +25,8 @@ function fakeElement(id) {
 	var el = {
 		id: id,
 		value: "",
+		disabled: false,
+		checked: false,
 		dataset: {},
 		textContent: "",
 		innerHTML: "",
@@ -33,16 +35,28 @@ function fakeElement(id) {
 		handlers: {},
 		offsetWidth: 220,
 		offsetHeight: 96,
+		offsetLeft: 240,
+		clientWidth: 184,
+		clientHeight: 38,
+		width: 300,
+		height: 150,
 		classList: {
 			toggle: function () {},
 			add: function () {},
 			remove: function () {}
 		},
 		setAttribute: function () {},
+		classList: {
+			flags: {},
+			toggle: function (name, on) { el.classList.flags[name] = !!on; },
+			add: function (name) { el.classList.flags[name] = true; },
+			remove: function (name) { el.classList.flags[name] = false; }
+		},
 		addEventListener: function (type, fn) {
 			if (!el.handlers[type]) el.handlers[type] = [];
 			el.handlers[type].push(fn);
 		},
+		closest: function () { return el; },
 		getBoundingClientRect: function () {
 			return { left: 0, top: 0, width: 1200, height: 700 };
 		},
@@ -75,6 +89,8 @@ globalThis.requestAnimationFrame = function (cb) {
 	return 1;
 };
 globalThis.addEventListener = function () {};
+globalThis.setTimeout = function () { return 1; };
+globalThis.clearTimeout = function () {};
 globalThis.devicePixelRatio = 2;
 globalThis.innerWidth = 1280;
 globalThis.innerHeight = 800;
@@ -90,6 +106,13 @@ assert(scripts.length >= 12, "index.html lists the scripts: " + scripts.length);
 assert.strictEqual(scripts[scripts.length - 1], "js/main.js", "main.js loads last, onto a complete RR");
 scripts.forEach(function (file) { require("../" + file); });
 var Main = globalThis.RR.Main; // main.js booted on require: document was defined
+var RR = globalThis.RR;
+var Const = require("../js/const.js");
+var Tech = require("../js/tech.js");
+var Train = require("../js/train.js");
+var inspect = Main.inspect;
+var c;
+var target;
 
 var canvas = elements["c"];
 var label = elements["node-label"];
@@ -120,10 +143,10 @@ for (i = 0; i < 120; i += 1) frame();
 assert(Number(elements["steps-value"].textContent) > 0, "frames advanced the fixed-step sim");
 assert(Number(elements["time-value"].textContent) > 0, "sim time telemetry advanced");
 
-// reset, then one frame: the camera snaps to the parked train at node 0,
-// which then sits at the horizontal center of the 1200 px stub viewport
+// reset: the camera snaps to the parked train at node 0, which then sits at the
+// horizontal center of the 1200 px stub viewport. in MAX mode the camera does not
+// follow — the canvas is a still — so the hover is read before the clock moves on
 Main.setSeed(424242);
-frame();
 
 canvas.handlers["mousemove"][0]({ clientX: 600, clientY: 500 });
 assert.strictEqual(label.hidden, false, "hover shows the node label");
@@ -145,7 +168,6 @@ Main.setSpeed(4);
 Main.togglePause();
 Main.togglePause();
 Main.setSeed(123456);
-frame();
 canvas.handlers["mousemove"][0]({ clientX: 600, clientY: 500 });
 assert.strictEqual(label.hidden, false, "label works after a seed change");
 
@@ -205,9 +227,91 @@ assert(Number(elements["train-speed-value"].textContent) >= 0, "train speed tele
 assert(/^[+-]?\d+\.\d\d$/.test(elements["optimum-value"].textContent), "the measured optimum reads as a signed rate");
 assert(/^\d\.\d\d · \d\.\d\d · \d\.\d\d$/.test(elements["optimum-build"].textContent) || /^PASS \d+%$/.test(elements["optimum-build"].textContent), "and names a grid cell of the sweep");
 
-// a parked train at seed reset reads zero speed on the first telemetry tick
+// a parked train at seed reset reads zero speed on the first telemetry tick, which
+// the seed change publishes itself: no frame needed, and none may move the train
 Main.setSeed(424242);
-frame();
 assert.strictEqual(elements["train-speed-value"].textContent, "0.00", "a train parked at the source reads zero speed");
 
-console.log("Boot checks passed: page boots headless from the script list in index.html, frames tick the economy, hover label, wagons and knob sliders respond, capex, cargo and the sweep's optimum readout update, the loop trades.");
+// ---- run modes ----
+// MAX is the default: a flat step budget a frame, and a frozen canvas. the draw
+// count is what says "frozen" — the clock advances without touching the world view
+var draws = 0;
+var realDraw = RR.Render.draw;
+var stepsBefore = inspect().sim.steps;
+
+RR.Render.draw = function () { draws += 1; return realDraw.apply(null, arguments); };
+Main.setAnimate(false);
+assert.strictEqual(Main.isAnimating(), false, "the page opens in MAX mode, animation is opt-in");
+assert.strictEqual(elements["animate-input"].checked, false, "and the checkbox says so");
+assert.strictEqual(elements["speed-input"].disabled, true, "the speed slider belongs to the animation");
+assert.strictEqual(elements["speed-value"].textContent, "MAX", "and reads MAX while the world is not animated");
+frame();                      // the mode change itself is drawn once, as a still
+draws = 0;
+stepsBefore = inspect().sim.steps;
+for (i = 0; i < 10; i += 1) frame();
+assert.strictEqual(draws, 0, "MAX mode does not redraw the canvas");
+assert.strictEqual(inspect().sim.steps - stepsBefore, 10 * Const.MAX_MODE_STEPS,
+	"MAX mode runs a flat budget of fixed steps a frame");
+assert.strictEqual(elements["dropped-value"].textContent, "0.00", "with no target rate, no sim time is dropped");
+
+// ticking the checkbox hands the sim back to the clock, at 2x…30x
+elements["animate-input"].checked = true;
+elements["animate-input"].handlers["change"][0]({ target: elements["animate-input"] });
+assert.strictEqual(Main.isAnimating(), true, "the checkbox turns the animation on");
+assert.strictEqual(elements["speed-input"].disabled, false, "and gives the speed slider back");
+assert.strictEqual(Number(elements["speed-input"].min), Const.MIN_SPEED, "the slider runs from");
+assert.strictEqual(Number(elements["speed-input"].max), Const.MAX_SPEED, "the slowest to the fastest animation");
+Main.setSpeed(30);
+stepsBefore = inspect().sim.steps;
+for (i = 0; i < 30; i += 1) frame();
+assert(inspect().sim.steps - stepsBefore > 30 * 30 * Const.DT * 60 * 0.8,
+	"an animated frame advances the clock at the speed it was set to");
+assert(inspect().sim.steps - stepsBefore < 30 * 30 * Const.DT * 60 * 1.2,
+	"and not faster than the clock allows");
+assert(draws >= 30, "and the canvas is drawn again");
+Main.setAnimate(false);
+
+// ---- smoothing and the trend ----
+input("smooth-input", 600);
+assert.strictEqual(elements["smooth-value"].textContent, "600 S", "the smoothing slider reads its window");
+input("smooth-input", 5);
+assert.strictEqual(elements["smooth-value"].textContent, "5 S", "and follows the slider down");
+input("smooth-input", 60);
+for (i = 0; i < 200; i += 1) frame();
+assert(/^[+-]?\d+\.\d\d$/.test(elements["avg-value"].textContent), "the long average reads as a signed rate");
+assert(/^(FLAT|\u25B2 [+-]\d+\.\d\d|\u25BC [+-]\d+\.\d\d)$/.test(elements["net-delta"].textContent),
+	"the trend reads flat, up or down");
+assert.strictEqual(typeof elements["net-item"].classList.flags["is-up"], "boolean", "the net row carries the trend");
+assert(Number(elements["rate-value"].textContent) > 1, "the measured sim rate is reported");
+assert(elements["net-graph"].width > 0, "the sparkline canvas is sized");
+
+// ---- build curves ----
+// every control has a plot, and touching the control is what shows it
+var plotBox = elements["build-plot"];
+var plotCanvas = elements["plot-canvas"];
+var plotsDrawn = 0;
+var realDrawPlot = RR.Render.drawPlot;
+
+RR.Render.drawPlot = function () { plotsDrawn += 1; return realDrawPlot.apply(null, arguments); };
+assert.strictEqual(plotBox.hidden, true, "no plot is shown until a control is touched");
+for (c = 0; c < 4; c += 1) {
+	target = c === 0 ? elements["wagons-input"] : elements[["gauge-input", "wheel-input", "engine-input"][c - 1]];
+	target.handlers["pointerdown"][0]({ target: target });
+	assert.strictEqual(plotBox.hidden, false, "touching a build control shows its plot");
+	assert(plotsDrawn > 0, "and the plot is drawn");
+	if (c === 2) assert(plotCanvas.height > plotCanvas.width * 0.7, "the wheel plot stacks a second chart");
+}
+Main.setKnob(Tech.GAUGE, 1);
+assert(plotsDrawn > 4, "the plot follows the knob while it is being dragged");
+RR.UI.hidePlot();
+assert.strictEqual(plotBox.hidden, true, "and goes away when the hand leaves");
+RR.Render.drawPlot = realDrawPlot;
+
+// cargo is units over the hold the gauge allows, not over the wagon count
+Main.setSeed(424242);
+Main.setWagons(4);
+frame();
+assert.strictEqual(elements["cargo-value"].textContent.split("/")[1], String(Train.capacity(inspect().sim.trains[0])),
+	"cargo reads against the consist's hold");
+
+console.log("Boot checks passed: page boots headless from the script list in index.html, MAX and animated modes, the smoothing slider and the trend, a plot for every build control, hover label, wagons and knob sliders respond, capex, cargo and the sweep's optimum readout update, the loop trades.");

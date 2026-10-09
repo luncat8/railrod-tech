@@ -33,6 +33,8 @@
 	var WAGON_GAP = 2;
 	var WAGON_PITCH = WAGON_W + WAGON_GAP;
 	var DWELL_H = 3;
+	var SLOT_H = 4;
+	var SLOT_W = WAGON_W - 4;
 
 	Render.create = function (canvas) {
 		return {
@@ -184,14 +186,38 @@
 		return (LOCO_W + wagons * WAGON_PITCH) * 0.5;
 	}
 
-	// one wagon body; an empty wagon shows a hollow frame, a loaded one its cargo colour
-	function drawWagon(view, wx, top, color, cargo) {
+	// one wagon: a stack of slots, one per unit the gauge allows it to carry. a slot
+	// holds a unit or shows as empty; cargo left in a slot the gauge no longer offers
+	// is drawn too, so nothing aboard is ever invisible
+	function drawWagon(view, train, wx, w, color) {
 		var context = view.context;
+		var hold = train.build.wagonHold;
+		var height = 4 + C.HOLD_MAX * SLOT_H;
+		var top = view.trackY - 6 - height;
+		var capacity = RR.Train.capacity(train);
+		var slot;
+		var k;
+		var py;
+		var resource;
 
 		context.fillStyle = color;
-		context.fillRect(wx, top, WAGON_W, 10);
-		context.fillStyle = cargo < 0 ? SKY : C.RES_COLORS[cargo];
-		context.fillRect(wx + 2, top + 2, WAGON_W - 4, 6);
+		context.fillRect(wx, top, WAGON_W, height);
+		for (k = 0; k < C.HOLD_MAX; k += 1) {
+			slot = k * train.wagons + w;
+			if (slot >= RR.Train.SLOT_MAX) break;
+			resource = train.cargo[slot];
+			py = top + 2 + k * SLOT_H;
+			if (resource < 0) {
+				if (slot >= capacity) continue;
+				context.fillStyle = SKY;
+				context.fillRect(wx + 2, py, SLOT_W, SLOT_H - 1);
+				continue;
+			}
+			context.fillStyle = C.RES_COLORS[resource];
+			context.globalAlpha = slot < capacity ? 1 : 0.45;
+			context.fillRect(wx + 2, py, SLOT_W, SLOT_H - 1);
+			context.globalAlpha = 1;
+		}
 	}
 
 	// the train runs +x, so the loco leads on the right and wagons trail to the left
@@ -200,14 +226,13 @@
 		var half = consistHalf(train.wagons);
 		var head = sx + half - LOCO_W;
 		var wx = head - WAGON_PITCH;
-		var top = view.trackY - 12;
 		var w;
 
 		context.fillStyle = color;
 		context.fillRect(head, view.trackY - 14, LOCO_W, 12);
 		context.fillRect(head + LOCO_W - 9, view.trackY - 22, 9, 8);
 		for (w = 0; w < train.wagons; w += 1) {
-			drawWagon(view, wx, top, color, train.cargo[w]);
+			drawWagon(view, train, wx, w, color);
 			wx -= WAGON_PITCH;
 		}
 		context.fillRect(sx - half - 2, view.trackY - 4, 2 * half + 4, 3);
@@ -350,6 +375,229 @@
 		context.fillStyle = PANEL_LINE;
 		context.fillRect(plotX, box.y + box.h - 4, plotW * (sweep.done / sweep.count), 2);
 	}
+
+	// ---- build curves: the plot behind the control the player is touching ----
+
+	var PLOT_BG = "rgba(12, 16, 13, 0.95)";
+	var PLOT_GRID = "rgba(183, 198, 183, 0.10)";
+	var PLOT_ZERO = "rgba(183, 198, 183, 0.26)";
+	var PLOT_MARK = "rgba(217, 185, 120, 0.55)";
+	var PLOT_TEXT = "#89958a";
+	var PLOT_HEAD = "#dce4db";
+	var PLOT_FONT = "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+	var LEGEND_H = 11;
+	var AXIS_H = 11;
+	var HEAD_H = 26;
+	var PAD = 9;
+
+	// one chart: a box, a grid, a curve per series and the player's own build on it
+	function drawChart(context, chart, box) {
+		var plotH = box.h - chart.seriesN * LEGEND_H - AXIS_H;
+		var top = box.y;
+		var bottom = top + plotH;
+		var zeroY = 0;
+		var s;
+		var i;
+		var series;
+		var span;
+		var x;
+		var y;
+		var zeroDrawn = false;
+		var mark = box.x + box.w * markerFraction(chart);
+
+		context.strokeStyle = PLOT_GRID;
+		context.lineWidth = 1;
+		context.beginPath();
+		for (i = 0; i <= 2; i += 1) {
+			y = Math.round(top + plotH * i / 2) + 0.5;
+			context.moveTo(box.x, y);
+			context.lineTo(box.x + box.w, y);
+		}
+		context.stroke();
+
+		for (s = 0; s < chart.seriesN; s += 1) {
+			series = chart.series[s];
+			span = series.hi - series.lo;
+			if (span <= 0) span = 1;
+			if (!zeroDrawn && series.lo < 0 && series.hi > 0) {
+				zeroDrawn = true;
+				zeroY = bottom + series.lo / span * plotH;
+			}
+		}
+		if (zeroDrawn) {
+			context.strokeStyle = PLOT_ZERO;
+			context.beginPath();
+			context.moveTo(box.x, Math.round(zeroY) + 0.5);
+			context.lineTo(box.x + box.w, Math.round(zeroY) + 0.5);
+			context.stroke();
+		}
+
+		if (chart.marker) {
+			context.strokeStyle = PLOT_MARK;
+			context.beginPath();
+			context.moveTo(mark, top);
+			context.lineTo(mark, bottom);
+			context.stroke();
+		}
+
+		for (s = 0; s < chart.seriesN; s += 1) {
+			series = chart.series[s];
+			span = series.hi - series.lo;
+			if (span <= 0) span = 1;
+			context.strokeStyle = series.color;
+			context.lineWidth = s === 0 ? 1.6 : 1.2;
+			context.beginPath();
+			for (i = 0; i < RR.Plot.SAMPLES; i += 1) {
+				x = box.x + box.w * (i / (RR.Plot.SAMPLES - 1));
+				y = bottom - (series.values[i] - series.lo) / span * plotH;
+				if (i === 0) context.moveTo(x, y);
+				else context.lineTo(x, y);
+			}
+			context.stroke();
+
+			if (!chart.marker) continue;
+			y = bottom - (series.at - series.lo) / span * plotH;
+			context.fillStyle = series.color;
+			context.fillRect(mark - 1.5, y - 1.5, 3, 3);
+		}
+
+		drawLegend(context, chart, box.x, bottom + 2, box.w);
+		drawAxis(context, chart, box.x, bottom + 2 + chart.seriesN * LEGEND_H, box.w);
+	}
+
+	function markerFraction(chart) {
+		var span = chart.x1 - chart.x0;
+
+		return span <= 0 ? 0 : (chart.markerX - chart.x0) / span;
+	}
+
+	// one row per series: its colour, its value under the marker, and its range
+	function drawLegend(context, chart, x, y, w) {
+		var s;
+		var series;
+		var row;
+
+		context.textBaseline = "middle";
+		context.font = "9px " + PLOT_FONT;
+		for (s = 0; s < chart.seriesN; s += 1) {
+			series = chart.series[s];
+			row = y + s * LEGEND_H + 6;
+			context.fillStyle = series.color;
+			context.fillRect(x, row - 2.5, 5, 5);
+			context.fillStyle = PLOT_HEAD;
+			context.textAlign = "left";
+			context.fillText(series.name, x + 10, row);
+			context.fillStyle = PLOT_TEXT;
+			context.textAlign = "right";
+			context.fillText(series.lo.toFixed(series.digits) + "–" + series.hi.toFixed(series.digits) + " " + series.unit, x + w, row);
+			if (!chart.marker) continue;
+			context.fillStyle = PLOT_HEAD;
+			context.fillText(series.at.toFixed(series.digits) + " " + series.unit, x + w * 0.60, row);
+		}
+		context.textAlign = "left";
+	}
+
+	function drawAxis(context, chart, x, y, w) {
+		context.fillStyle = PLOT_TEXT;
+		context.font = "8px " + PLOT_FONT;
+		context.textBaseline = "top";
+		context.textAlign = "left";
+		context.fillText(chart.x0.toFixed(chart.xDigits), x, y);
+		context.textAlign = "right";
+		context.fillText(chart.x1.toFixed(chart.xDigits) + " " + chart.xLabel, x + w, y);
+		context.textAlign = "left";
+	}
+
+	// the whole popover: a title, one or two charts, from a filled Plot
+	Render.drawPlot = function (context, plot, width, height) {
+		var chartH = (height - HEAD_H - PAD) / plot.chartN;
+		var c;
+
+		context.clearRect(0, 0, width, height);
+		context.fillStyle = PLOT_BG;
+		context.fillRect(0, 0, width, height);
+		context.strokeStyle = PANEL_LINE;
+		context.lineWidth = 1;
+		context.strokeRect(0.5, 0.5, width - 1, height - 1);
+
+		context.fillStyle = PLOT_HEAD;
+		context.font = "9px " + PLOT_FONT;
+		context.textBaseline = "top";
+		context.fillText(plot.title, PAD, PAD - 2);
+		context.fillStyle = PLOT_TEXT;
+		context.font = "8px " + PLOT_FONT;
+		context.fillText(plot.note, PAD, PAD + 11);
+
+		for (c = 0; c < plot.chartN; c += 1) {
+			drawChart(context, plot.charts[c], {
+				x: PAD,
+				y: HEAD_H + c * chartH,
+				w: width - 2 * PAD,
+				h: chartH - 2
+			});
+		}
+	};
+
+	Render.plotHeight = function (chartN) {
+		return HEAD_H + PAD + chartN * (58 + 3 * LEGEND_H + AXIS_H + 6);
+	};
+
+	// ---- sparkline: the smoothed net rate over the sim's last window ----
+
+	var GRAPH_UP = "#a9d68e";
+	var GRAPH_DOWN = "#d98a78";
+	var GRAPH_FLAT = "#89958a";
+
+	// the history is a ring: oldest sample first, whatever the head is
+	Render.drawGraph = function (context, sim, width, height) {
+		var history = sim.history;
+		var count = sim.historyCount;
+		var head = sim.historyHead;
+		var lo = 0;
+		var hi = 0;
+		var span;
+		var color = sim.netTrend > C.TREND_EPS ? GRAPH_UP : (sim.netTrend < -C.TREND_EPS ? GRAPH_DOWN : GRAPH_FLAT);
+		var zeroY;
+		var i;
+		var index;
+		var v;
+		var x;
+		var y;
+
+		context.clearRect(0, 0, width, height);
+		if (count < 2) return;
+
+		for (i = 0; i < count; i += 1) {
+			v = history[i];
+			if (v < lo) lo = v;
+			if (v > hi) hi = v;
+		}
+		if (hi <= 0) hi = 0;
+		if (lo >= 0) lo = 0;
+		span = hi - lo;
+		if (span <= 0) span = 1;
+		zeroY = height - 2 - (0 - lo) / span * (height - 4);
+
+		context.strokeStyle = PLOT_ZERO;
+		context.lineWidth = 1;
+		context.beginPath();
+		context.moveTo(0, Math.round(zeroY) + 0.5);
+		context.lineTo(width, Math.round(zeroY) + 0.5);
+		context.stroke();
+
+		context.strokeStyle = color;
+		context.lineWidth = 1.4;
+		context.beginPath();
+		for (i = 0; i < count; i += 1) {
+			index = (head - count + i + C.HISTORY_N * 2) % C.HISTORY_N;
+			v = history[index];
+			x = width * (i / (count - 1));
+			y = height - 2 - (v - lo) / span * (height - 4);
+			if (i === 0) context.moveTo(x, y);
+			else context.lineTo(x, y);
+		}
+		context.stroke();
+	};
 
 	Render.draw = function (view, sim, paused, frameDt, sweep) {
 		var context = view.context;

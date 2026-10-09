@@ -48,6 +48,20 @@
 		return steps;
 	};
 
+	// MAX mode: no time scale, no accumulator, nothing to fall behind. the frame runs
+	// exactly `budget` fixed steps, so the rate is whatever the machine manages and
+	// the dropped-time ledger stays at zero — there is no target to miss
+	Clock.runSteps = function (clock, budget, step, state) {
+		var steps = 0;
+
+		while (steps < budget) {
+			step(state, clock.dt);
+			steps += 1;
+		}
+		clock.lastSteps = steps;
+		return steps;
+	};
+
 	RR.Clock = Clock;
 
 	if (typeof module !== "undefined" && module.exports) module.exports = Clock;

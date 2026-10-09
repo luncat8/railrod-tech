@@ -141,18 +141,21 @@ function testTransactIsQuoteByQuote() {
 		{ x: 20, kind: World.CON, need: BIT_R1, base: 30, stock: [0, 0, 0] }
 	]);
 	var train = emptyTrain(3);
+	var take = Train.capacity(train);
 	var want = 0;
 	var s;
 	var moved;
 
 	// each unit is quoted after the previous one has moved the stock
-	for (s = 50; s > 47; s -= 1) want -= buyAt(world, 0, R1, s);
+	for (s = 50; s > 50 - take; s -= 1) want -= buyAt(world, 0, R1, s);
 	moved = Trade.transact(train, world, 0);
-	assert.strictEqual(moved, 3, "three wagons take three units");
+	assert.strictEqual(moved, take, "three wagons take a full hold of units");
 	assert(Math.abs(train.cash - want) < 1e-5, "cash is the sum of sequential buy quotes (got " + train.cash + ", want " + want + ")");
-	assert.strictEqual(world.stock[0], 47, "the source gave up exactly three units");
-	assert.strictEqual(train.cargoUnits, 3, "and the train holds three");
-	assert(train.cargo[0] === R1 && train.cargo[1] === R1 && train.cargo[2] === R1, "in the first three wagons");
+	assert.strictEqual(world.stock[0], 50 - take, "the source gave up exactly the units that fit");
+	assert.strictEqual(train.cargoUnits, take, "and the train holds them");
+	for (s = 0; s < Train.capacity(train); s += 1) {
+		assert.strictEqual(train.cargo[s], R1, "every slot the consist offers is filled");
+	}
 }
 
 function testUnloadPaysSellQuotes() {
@@ -164,10 +167,7 @@ function testUnloadPaysSellQuotes() {
 	var s;
 	var moved;
 
-	train.cargo[0] = R1;
-	train.cargo[1] = R1;
-	train.cargo[2] = R1;
-	train.cargoUnits = 3;
+	fillCargo(train, world, 3);
 	for (s = 5; s < 8; s += 1) want += sellAt(world, 0, R1, s);
 	moved = Trade.transact(train, world, 0);
 	assert.strictEqual(moved, 3, "three units unloaded");
@@ -199,8 +199,7 @@ function testSourceDoesNotBuyBack() {
 	var train = emptyTrain(2);
 	var cash;
 
-	train.cargo[0] = R1;
-	train.cargoUnits = 1;
+	fillCargo(train, world, 1);
 	cash = train.cash;
 	assert.strictEqual(Trade.transact(train, world, 0), 1, "the source takes nothing back but loads one free wagon");
 	assert.strictEqual(train.cargoUnits, 2, "the carried unit stays on board");
@@ -214,8 +213,7 @@ function testFullConsumerRefusesAndTrainKeepsCargo() {
 	]);
 	var train = emptyTrain(2);
 
-	train.cargo[0] = R1;
-	train.cargoUnits = 1;
+	fillCargo(train, world, 1);
 	assert.strictEqual(Trade.transact(train, world, 0), 0, "a full yard takes nothing");
 	assert.strictEqual(train.cargoUnits, 1, "the unit stays on board");
 	assert.strictEqual(train.cash, 0, "and no money moves");
@@ -228,8 +226,8 @@ function testLoadingStopsAtTheWagonLimit() {
 	]);
 	var train = emptyTrain(2);
 
-	assert.strictEqual(Trade.transact(train, world, 0), 2, "two wagons take exactly two units");
-	assert.strictEqual(world.stock[0], 28, "and no more leave the yard");
+	assert.strictEqual(Trade.transact(train, world, 0), Train.capacity(train), "two wagons take exactly one hold each");
+	assert.strictEqual(world.stock[0], 30 - Train.capacity(train), "and no more leave the yard");
 	assert.strictEqual(Trade.wantsStop(train, world, 1), true, "the full train wants the consumer");
 }
 
@@ -245,7 +243,7 @@ function testWantsStopAgreesWithTransact() {
 	var wants;
 	var moved;
 	var checked = 0;
-	var loadStates = [0, 1, 2];
+	var loadStates = [0, 1, 2, 3, 4, 5, 8];
 
 	for (s = 0; s < 40; s += 1) {
 		world = World.generate(Rng.create(5000 + s));
@@ -264,12 +262,18 @@ function testWantsStopAgreesWithTransact() {
 	assert(checked > 1000, "checked a meaningful number of stop decisions (" + checked + ")");
 }
 
-// a train carrying `units` of R1 (the first wagons), or nothing
+// a train carrying `units` of R1, in the first slots the consist offers
 function fillCargo(train, world, units) {
-	var w;
+	var top = Train.capacity(train);
+	var slot = 0;
 
-	for (w = 0; w < units; w += 1) train.cargo[w] = R1;
-	train.cargoUnits = units;
+	train.cargoUnits = 0;
+	while (units > 0 && slot < top) {
+		train.cargo[slot] = R1;
+		train.cargoUnits += 1;
+		units -= 1;
+		slot += 1;
+	}
 }
 
 // the 0.1.4 profit measure: the EMA of cash flow, averaged over a window, equals

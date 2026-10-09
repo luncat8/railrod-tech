@@ -157,7 +157,7 @@ function testStopsAreExactAndBrakingStaysBounded() {
 	var steps;
 
 	parkAtSource(train, world);
-	assert.strictEqual(train.cargoUnits, 4, "a rich source fills every wagon while the margin pays");
+	assert.strictEqual(train.cargoUnits, Train.capacity(train), "a rich source fills every slot while the margin pays");
 	stepUntil(train, world, function () {
 		return train.state === Train.CRUISE;
 	});
@@ -218,13 +218,13 @@ function testTransferDwellMatchesUnits() {
 	var train = freshTrain(3);
 
 	parkAtSource(train, world);
-	assert.strictEqual(train.cargoUnits, 3, "three wagons, three units");
-	assert(Math.abs(train.dwellTotal - 3 / Const.UNITS_PER_S) < 1e-9, "load dwell = units / UNITS_PER_S");
+	assert.strictEqual(train.cargoUnits, Train.capacity(train), "three wagons, a full hold of units");
+	assert(Math.abs(train.dwellTotal - train.cargoUnits / train.build.transferRate) < 1e-9, "load dwell = units / transfer rate");
 	stepUntil(train, world, function () {
 		return isDwelling(train) && train.at === 1;
 	});
 	assert.strictEqual(train.cargoUnits, 0, "the consumer took every unit");
-	assert(Math.abs(train.dwellTotal - 3 / Const.UNITS_PER_S) < 1e-9, "unload dwell = units / UNITS_PER_S");
+	assert(Math.abs(train.dwellTotal - Train.capacity(train) / train.build.transferRate) < 1e-9, "unload dwell = units / transfer rate");
 }
 
 function testSourceWithFewUnitsLoadsFewUnits() {
@@ -257,12 +257,13 @@ function testSetWagonsNeverDropsCargo() {
 	var train = freshTrain(4);
 
 	parkAtSource(train, world);
-	assert.strictEqual(train.cargoUnits, 4, "four wagons loaded");
+	var loaded = train.cargoUnits;
+	assert.strictEqual(loaded, Train.capacity(train), "four wagons loaded");
 	Train.setWagons(train, 1);
 	assert.strictEqual(train.wagons, 4, "a loaded consist cannot shrink below its cargo");
 	Train.setWagons(train, 8);
 	assert.strictEqual(train.wagons, 8, "growing is always allowed");
-	assert.strictEqual(train.cargoUnits, 4, "cargo is untouched by the change");
+	assert.strictEqual(train.cargoUnits, loaded, "cargo is untouched by the change");
 }
 
 function testSetWagonsFloorFollowsTheHighestLoadedWagon() {
@@ -270,9 +271,9 @@ function testSetWagonsFloorFollowsTheHighestLoadedWagon() {
 	var train = freshTrain(6);
 
 	parkAtSource(train, world);
-	assert.strictEqual(train.cargoUnits, 3, "three units loaded into the first wagons");
+	assert.strictEqual(train.cargoUnits, 3, "three units loaded into the first slots");
 	Train.setWagons(train, 2);
-	assert.strictEqual(train.wagons, 3, "the floor is the highest loaded wagon index + 1");
+	assert.strictEqual(train.wagons, 3, "three units are dealt into three wagons before any takes a second");
 }
 
 function testKnobChangeNeverTeleports() {

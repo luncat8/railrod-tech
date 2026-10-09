@@ -4,13 +4,15 @@
 	var RR = root.RR || (root.RR = {});
 
 	RR.Const = {
-		// fixed-step clock
+		// fixed-step clock. two run modes share one step function:
+		// ANIMATE is the accumulator below a time scale, MAX is a flat step budget
 		DT: 1 / 60,
-		MAX_STEPS: 30,
+		MAX_STEPS: 96,       // animation only: the most a lagging frame may catch up
+		MAX_MODE_STEPS: 3000, // MAX: 50 sim s a frame, ~3000x real time at 60 Hz
 		MAX_FRAME_SECONDS: 0.25,
-		MIN_SPEED: 0.25,
-		MAX_SPEED: 8,
-		DEFAULT_SPEED: 1,
+		MIN_SPEED: 2,
+		MAX_SPEED: 30,
+		DEFAULT_SPEED: 8,
 		DEFAULT_SEED: 731421,
 		FPS_WINDOW_MS: 500,
 		TELEMETRY_INTERVAL_MS: 250,
@@ -70,15 +72,29 @@
 		WAGON_MAX: 8,
 		WAGON_DEFAULT: 4,
 		BRAKE_DECEL: 0.6,   // km/s², constant service braking for stops
-		UNITS_PER_S: 2,     // transfers per second across the whole train
+		UNITS_PER_S: 2,     // transfers per second across a one-unit wagon
+		TRANSFER_SIZE_GAIN: 0.5, // a bigger wagon also empties faster: rate × (1 + gain·(hold−1))
+		HOLD_MAX: 2,        // units one wagon holds on the widest gauge, one on the narrowest
 		STOP_EPS_KM: 0.01, // the node just left counts as behind until the train is this far clear
 		// money: unbounded, so only rates count. capex is amortised, not charged
-		PROFIT_TAU_S: 60,  // about one loop: shorter windows read the lumps of trade, not the rate
+		SMOOTH_MIN_S: 5,    // the player's smoothing window: 5 s twitches, 600 s is the steady rate
+		SMOOTH_MAX_S: 600,
+		SMOOTH_STEP_S: 5,
+		SMOOTH_DEFAULT_S: 60, // about one loop: shorter windows read the lumps of trade, not the rate
+		TREND_SLOW: 4,      // the trend is the fast window against one this many times slower
+		TREND_EPS: 0.005,   // below this the trend reads as flat, not as green or red
+		HISTORY_N: 96,      // sparkline samples
+		HISTORY_DIV: 8,     // one sample per smooth / this; the window is HISTORY_N times that
+		HISTORY_PER_FRAME: 4, // and never more than this many per frame, however big the frame is
 		NET_MEAN_S: 600,   // the rate window a swept dot is worth comparing against
 		AMORT_S: 1200,     // horizon over which the build's value is recovered, s
-		K_TRACK: 10,       // track cr/km at g = 0
+		K_TRACK: 10,       // track cr/km scale
+		TRACK_BASE: 0.4,   // track cr/km = K_TRACK · (base + gain · g²): the roadbed
+		TRACK_GAIN: 3,     // of a gauge that carries wider wagons is not a linear bill
 		CW: 60,            // wagon cr at g = d = 0
-		CL: 300,           // loco cr at e = 0
+		WAGON_HOLD_COST: 1, // wagon cr follows the hold it carries, not only its own iron
+		CL: 450,           // loco cr at e = 1
+		LOCO_COST_EXP: 2.2,
 		GAUGE_MIN_M: 0.6,  // readouts only: gauge = 0.6 + 3.4g m
 		GAUGE_MAX_M: 4.0,
 		WHEEL_MIN_M: 0.4,  // readouts only: wheel = 0.4 + 1.2d m
@@ -92,8 +108,13 @@
 		SWEEP_MIN_S: 150,          // a sample is at least this long and ends with the train empty
 		SWEEP_MAX_S: 600,          // and if it never gets there, this cutoff prices it as dead weight
 		SWEEP_EMA: 0.4,            // weight of a new pass in a dot's running average
-		SWEEP_BUDGET_STEPS: 4000,  // sweep sim steps per frame, the price of the panel
+		SWEEP_BUDGET_ANIM: 4000,   // sweep steps per frame while the world is animated
+		SWEEP_BUDGET_MAX: 6000,    // and per frame in MAX, where no frame is drawn at all
 		SWEEP_REFRESH_S: 1200,     // one market cycle: the next pass samples another phase of it
+
+		// build curves: one plot per build control, sampled from the model
+		PLOT_SAMPLES: 40,
+		PLOT_HOLD_MS: 2200,    // a touched control keeps its plot up this long
 
 		// camera / view
 		CAMERA_FOLLOW: 2.5,

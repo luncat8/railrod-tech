@@ -7,7 +7,7 @@ var World = require("../js/world.js");
 require("../js/economy.js");
 var Tech = require("../js/tech.js");
 require("../js/trade.js");
-require("../js/train.js");
+var Train = require("../js/train.js");
 var Sim = require("../js/sim.js");
 
 var SEED_BASE = 9000;
@@ -31,7 +31,7 @@ function carriedRes(train, r) {
 	var count = 0;
 	var w;
 
-	for (w = 0; w < train.wagons; w += 1) {
+	for (w = 0; w < Train.SLOT_MAX; w += 1) {
 		if (train.cargo[w] === r) count += 1;
 	}
 	return count;
@@ -71,15 +71,16 @@ function checkBounds(sim, label) {
 			assert(world.stock[idx] <= world.cap[idx] + 1e-4, label + ": no stock over cap");
 		}
 	}
-	for (w = 0; w < train.cargo.length; w += 1) {
-		if (w >= train.wagons) {
-			assert.strictEqual(train.cargo[w], -1, label + ": no cargo beyond the consist");
-			continue;
-		}
-		if (train.cargo[w] >= 0) units += 1;
+	// a slot is the unit of trade: it holds one unit of one resource, or nothing
+	for (w = 0; w < Train.SLOT_MAX; w += 1) {
+		if (train.cargo[w] < 0) continue;
+		units += 1;
+		assert(Train.wagonOfSlot(train, w) < train.wagons, label + ": no cargo beyond the consist");
 	}
 	assert.strictEqual(units, train.cargoUnits, label + ": cargo count matches the wagons");
-	assert(train.cargoUnits <= train.wagons, label + ": no more units than wagons");
+	// the widest gauge sets the ceiling: cargo loaded under it stays aboard if the
+	// gauge is narrowed, so the bound is the hold, not the hold of the moment
+	assert(train.cargoUnits <= train.wagons * Const.HOLD_MAX, label + ": no more units than the gauge allows");
 }
 
 // the run: normal driving, then knob and wagon changes in the middle of trading,

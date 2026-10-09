@@ -90,6 +90,43 @@ function testReadoutsAreInPhysicalUnits() {
 	assert(Math.abs(Tech.wheelM(1) - 1.6) < 1e-9, "wheel top is 1.6 m");
 }
 
+// 0.1.7: the gauge carries the cargo. a wider wagon holds more units, and the hold
+// is a whole number of units over the wagon — the rest of the model counts in units
+function testGaugeSetsTheWagonHold() {
+	var i;
+
+	assert.strictEqual(Tech.holdPerWagon(0), 1, "the narrowest gauge holds one unit a wagon");
+	assert.strictEqual(Tech.holdPerWagon(1), Const.HOLD_MAX, "the widest holds HOLD_MAX units a wagon");
+	for (i = 1; i <= STEPS; i += 1) {
+		assert(Tech.holdPerWagon(i / STEPS) > Tech.holdPerWagon((i - 1) / STEPS), "a wider gauge always holds more");
+	}
+}
+
+// the hatch grows with the wagon, so a bigger wagon turns round in less than its own
+// size in extra time — which is what makes the size worth paying for
+function testTransferRateGrowsWithTheHold() {
+	var lo = buildAt(0, 0.5, 0.5);
+	var hi = buildAt(1, 0.5, 0.5);
+
+	assert(hi.transferRate > lo.transferRate, "a bigger wagon is emptied through a bigger hatch");
+	assert(hi.wagonHold / hi.transferRate > lo.wagonHold / lo.transferRate, "but not fast enough to keep up with its hold");
+	assert(hi.transferRate / lo.transferRate < hi.wagonHold / lo.wagonHold, "so the hatch is the cheaper of the two");
+}
+
+// the dwell rule: it grows fast with the wagon count and slowly with the wagon size
+function testDwellGrowsWithCountBeforeSize() {
+	var wagons = 4;
+	var narrow = buildAt(0, 0.5, 0.5);
+	var wide = buildAt(1, 0.5, 0.5);
+	var swapNarrow = 2 * Math.round(wagons * narrow.wagonHold) / narrow.transferRate;
+	var swapWide = 2 * Math.round(wagons * wide.wagonHold) / wide.transferRate;
+	var swapTwice = 2 * Math.round(2 * wagons * narrow.wagonHold) / narrow.transferRate;
+
+	assert(swapTwice > 1.9 * swapNarrow, "twice the wagons is nearly twice the dwell");
+	assert(swapWide > swapNarrow, "a wider wagon does take longer to load and unload");
+	assert(swapWide < 1.5 * swapNarrow, "but a fraction of what the count costs");
+}
+
 // a knob change reaches the sim: the build and the amortised capex both move
 function testSimSetKnobUpdatesBuildAndCapex() {
 	var sim = Sim.create(24680);
@@ -108,5 +145,8 @@ testKnobsMoveTheBuildMonotonically();
 testClampKeepsKnobsInRange();
 testCapexIsTheAmortisedBuildValue();
 testReadoutsAreInPhysicalUnits();
+testGaugeSetsTheWagonHold();
+testTransferRateGrowsWithTheHold();
+testDwellGrowsWithCountBeforeSize();
 testSimSetKnobUpdatesBuildAndCapex();
-console.log("Tech checks passed: default build matches the 0.1.3 consist, knobs move the build as stated, clamp, amortised capex, physical readouts.");
+console.log("Tech checks passed: default build matches the 0.1.3 consist, knobs move the build as stated, clamp, amortised capex, physical readouts, and the gauge carrying the hold.");

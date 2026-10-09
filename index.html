@@ -18,7 +18,7 @@
 					<strong>RAILROD</strong>
 					<span>RAIL ECONOMY / LOOP TRADE</span>
 				</div>
-				<div class="build-badge"><span></span>PROTOTYPE 0.1.5</div>
+				<div class="build-badge"><span></span>PROTOTYPE 0.1.7</div>
 			</div>
 
 			<div class="runtime-controls">
@@ -34,11 +34,24 @@
 
 				<div class="control-divider" aria-hidden="true"></div>
 
+				<label class="animate-control" for="animate-input">
+					<input id="animate-input" type="checkbox" aria-label="Animate the world">
+					<span class="control-label">ANIMATE</span>
+				</label>
+
 				<label class="speed-control" for="speed-input">
-					<span class="control-label">SIMULATION SPEED</span>
+					<span class="control-label">SPEED</span>
 					<span class="speed-row">
-						<input id="speed-input" type="range" min="0.25" max="8" step="0.25" value="1" aria-label="Simulation speed">
-						<output id="speed-value" for="speed-input">1.00×</output>
+						<input id="speed-input" type="range" min="2" max="30" step="0.5" value="8" aria-label="Animation speed">
+						<output id="speed-value" for="speed-input">MAX</output>
+					</span>
+				</label>
+
+				<label class="speed-control" for="smooth-input">
+					<span class="control-label">SMOOTHING</span>
+					<span class="speed-row">
+						<input id="smooth-input" type="range" min="5" max="600" step="5" value="60" aria-label="Profit smoothing window">
+						<output id="smooth-value" for="smooth-input">60 S</output>
 					</span>
 				</label>
 
@@ -66,8 +79,8 @@
 						</div>
 						<div class="capability">
 							<span class="capability-index">02</span>
-							<span class="capability-label">TIME SCALE</span>
-							<strong>0.25–8<small>×</small></strong>
+							<span class="capability-label">ANIMATE</span>
+							<strong>2–30<small>×</small></strong>
 						</div>
 						<div class="capability">
 							<span class="capability-index">03</span>
@@ -84,13 +97,17 @@
 
 				<aside class="next-step" aria-label="Next milestone">
 					<span class="next-step-label">UP NEXT</span>
-					<strong>World legibility</strong>
-					<span class="next-step-meta">MILESTONE 0.1.6 <span>↗</span></span>
+					<strong>Build curves</strong>
+					<span class="next-step-meta">MILESTONE 0.1.7 <span>↗</span></span>
 				</aside>
 			</div>
 		</main>
 
 		<footer class="hud-bottom" aria-label="Simulation telemetry">
+			<div id="build-plot" class="build-plot" hidden>
+				<canvas id="plot-canvas" aria-hidden="true"></canvas>
+			</div>
+
 			<div class="build-group">
 				<label class="speed-control consist-control" for="wagons-input">
 					<span class="control-label">WAGONS</span>
@@ -123,10 +140,12 @@
 			</div>
 
 			<div class="telemetry-group">
-				<div class="telemetry-item telemetry-item--net">
+				<div class="telemetry-item telemetry-item--net" id="net-item">
 					<span class="telemetry-label">NET / S</span>
 					<strong><span id="net-value">+0.00</span><small> CR/S</small></strong>
+					<span id="net-delta" class="net-delta">FLAT</span>
 				</div>
+				<canvas id="net-graph" class="net-graph" width="184" height="38" aria-hidden="true"></canvas>
 				<div class="telemetry-item">
 					<span class="telemetry-label">PROFIT / S</span>
 					<strong><span id="profit-value">+0.00</span><small> CR/S</small></strong>
@@ -134,6 +153,10 @@
 				<div class="telemetry-item">
 					<span class="telemetry-label">CAPEX / S</span>
 					<strong><span id="capex-value">-0.00</span><small> CR/S</small></strong>
+				</div>
+				<div class="telemetry-item">
+					<span class="telemetry-label">AVG / S</span>
+					<strong><span id="avg-value">+0.00</span><small> CR/S</small></strong>
 				</div>
 				<div class="telemetry-item telemetry-item--optimum">
 					<span class="telemetry-label">OPTIMUM / S</span>
@@ -152,6 +175,10 @@
 					<strong><span id="cargo-value">0/4</span></strong>
 				</div>
 
+				<div class="telemetry-item">
+					<span class="telemetry-label">SIM RATE</span>
+					<strong><span id="rate-value">—</span><small> ×REAL</small></strong>
+				</div>
 				<div class="telemetry-item">
 					<span class="telemetry-label">RENDER</span>
 					<strong><span id="fps-value">—</span><small> FPS</small></strong>
@@ -186,6 +213,7 @@
 	<script src="./js/trade.js"></script>
 	<script src="./js/train.js"></script>
 	<script src="./js/sim.js"></script>
+	<script src="./js/plot.js"></script>
 	<script src="./js/sweep.js"></script>
 	<script src="./js/clock.js"></script>
 	<script src="./js/render.js"></script>

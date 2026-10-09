@@ -11,6 +11,12 @@
 	Train.CRUISE = 0;
 	Train.DWELL = 1;
 
+	// one slot per unit the widest wagon could hold, per wagon. a slot is the unit of
+	// trade, not the wagon: free space in the consist takes any resource, so a
+	// half-full train is never stuck holding room it cannot offer to the cargo the
+	// market actually wants
+	Train.SLOT_MAX = C.WAGON_MAX * C.HOLD_MAX;
+
 	// the train runs +x around the loop; it only ever stops where a stop pays
 	Train.create = function (build, wagons) {
 		return {
@@ -24,12 +30,29 @@
 			dwellLeft: 0,
 			dwellTotal: 0,
 			wagons: wagons,
-			cargo: new Int8Array(C.WAGON_MAX).fill(-1), // -1 = empty wagon; 0 is R1
+			cargo: new Int8Array(Train.SLOT_MAX).fill(-1), // slot → resource; -1 = empty, 0 is R1
 			cargoUnits: 0,
 			cash: 0,
 			build: build,
 			capexRate: Tech.capexRate(build, wagons)
 		};
+	};
+
+	// slots are dealt round the consist, one to each wagon before any wagon gets a
+	// second: the train loads evenly, and the picture says so
+	Train.wagonOfSlot = function (train, slot) {
+		return slot % train.wagons;
+	};
+
+	Train.tierOfSlot = function (train, slot) {
+		return Math.floor(slot / train.wagons);
+	};
+
+	// the slots the consist offers are the lowest ones, so a widening opens one more
+	// slot at a time. cargo in a slot the gauge no longer offers stays aboard until
+	// it is sold somewhere
+	Train.slotIsOpen = function (train, slot) {
+		return slot < Train.capacity(train);
 	};
 
 	// the empty consist: what the performance panel plots against net rate
@@ -39,6 +62,30 @@
 
 	Train.mass = function (train) {
 		return train.build.mLoco + train.wagons * train.build.mWagon + train.cargoUnits * C.UNIT_T;
+	};
+
+	// payload: how many slots the consist offers, rounded down to whole units. cargo
+	// loaded under a wider gauge stays aboard if the gauge is then narrowed, and
+	// simply counts against the hold while it does
+	Train.capacity = function (train) {
+		return Math.round(train.wagons * train.build.wagonHold);
+	};
+
+	Train.freeSpace = function (train) {
+		var free = Train.capacity(train) - train.cargoUnits;
+
+		return free > 0 ? free : 0;
+	};
+
+	// the first empty slot the consist offers, or -1 when there is none
+	Train.emptySlot = function (train) {
+		var top = Train.capacity(train);
+		var slot;
+
+		for (slot = 0; slot < top; slot += 1) {
+			if (train.cargo[slot] < 0) return slot;
+		}
+		return -1;
 	};
 
 	// signed net acceleration; resistance may exceed traction and slow the train
@@ -129,7 +176,7 @@
 			return;
 		}
 		train.state = Train.DWELL;
-		train.dwellTotal = moved / C.UNITS_PER_S;
+		train.dwellTotal = moved / train.build.transferRate;
 		train.dwellLeft = train.dwellTotal;
 	}
 
@@ -159,8 +206,6 @@
 
 	// new world: the train parks at node 0 and trades there like at any stop
 	Train.reset = function (train, world) {
-		var w;
-
 		train.x = world.x[0];
 		train.v = 0;
 		train.stopNode = -1;
@@ -168,7 +213,7 @@
 		train.last = -1;
 		train.cash = 0;
 		train.cargoUnits = 0;
-		for (w = 0; w < train.cargo.length; w += 1) train.cargo[w] = -1;
+		train.cargo.fill(-1);
 		depart(train);
 		arrive(train, world, 0);
 	};
@@ -178,12 +223,18 @@
 		train.capexRate = Tech.capexRate(build, train.wagons);
 	};
 
-	// the highest loaded wagon sets the floor: cargo is never dropped from a wagon
+	// the consist cannot shrink below the wagons its cargo needs at the hold the gauge
+	// allows, nor below the highest wagon that cargo is dealt into: cargo is never
+	// dropped from a slot
 	function loadedFloor(train) {
-		var w;
+		var need = Math.ceil(train.cargoUnits / train.build.wagonHold);
+		var slot;
+		var wagon;
 
-		for (w = train.cargo.length - 1; w >= 0; w -= 1) {
-			if (train.cargo[w] >= 0) return w + 1;
+		for (slot = Train.SLOT_MAX - 1; slot >= 0; slot -= 1) {
+			if (train.cargo[slot] < 0) continue;
+			wagon = Train.wagonOfSlot(train, slot) + 1;
+			return wagon > need ? wagon : need;
 		}
 		return 0;
 	}

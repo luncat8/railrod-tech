@@ -69,59 +69,60 @@
 	};
 
 	function carriesFor(train, world, i) {
-		var w;
+		var slot;
 		var r;
 
-		for (w = 0; w < train.wagons; w += 1) {
-			r = train.cargo[w];
+		for (slot = 0; slot < RR.Train.SLOT_MAX; slot += 1) {
+			r = train.cargo[slot];
 			if (r >= 0 && Trade.wantsUnload(world, i, r)) return true;
 		}
 		return false;
 	}
 
-	// the stop rule: a node is worth stopping at if the train can unload there,
-	// or it has a free wagon and something profitable to load there
+	// the stop rule: a node is worth stopping at if the train can unload there, or it
+	// has a free slot and something profitable to put in it
 	Trade.wantsStop = function (train, world, i) {
 		if (carriesFor(train, world, i)) return true;
-		return train.cargoUnits < train.wagons && Trade.pickLoad(world, i) >= 0;
+		return RR.Train.freeSpace(train) > 0 && Trade.pickLoad(world, i) >= 0;
 	};
 
-	function sell(train, world, i, w, r) {
+	function sell(train, world, i, slot, r) {
 		var idx = i * C.RES_N + r;
 
 		train.cash += Economy.sellQuote(world, i, r);
 		world.stock[idx] += 1;
-		train.cargo[w] = -1;
+		train.cargo[slot] = -1;
 		train.cargoUnits -= 1;
 	}
 
-	function buy(train, world, i, w, r) {
+	function buy(train, world, i, r) {
 		var idx = i * C.RES_N + r;
+		var slot = RR.Train.emptySlot(train);
 
 		train.cash -= Economy.buyQuote(world, i, r);
 		world.stock[idx] -= 1;
-		train.cargo[w] = r;
+		train.cargo[slot] = r;
 		train.cargoUnits += 1;
 	}
 
-	// one stop: unload first, then load into the freed and empty wagons.
-	// every unit is quoted after the previous one has moved stock. returns units moved
+	// one stop: unload first, slot by slot, then fill the free slots of the consist
+	// with the best margin the node offers. every unit is quoted after the previous
+	// one has moved stock. returns units moved
 	Trade.transact = function (train, world, i) {
 		var moved = 0;
-		var w;
+		var slot;
 		var r;
 
-		for (w = 0; w < train.wagons; w += 1) {
-			r = train.cargo[w];
+		for (slot = 0; slot < RR.Train.SLOT_MAX; slot += 1) {
+			r = train.cargo[slot];
 			if (r < 0 || !Trade.wantsUnload(world, i, r)) continue;
-			sell(train, world, i, w, r);
+			sell(train, world, i, slot, r);
 			moved += 1;
 		}
-		for (w = 0; w < train.wagons; w += 1) {
-			if (train.cargo[w] >= 0) continue;
+		while (RR.Train.freeSpace(train) > 0) {
 			r = Trade.pickLoad(world, i);
 			if (r < 0) break;
-			buy(train, world, i, w, r);
+			buy(train, world, i, r);
 			moved += 1;
 		}
 		return moved;
