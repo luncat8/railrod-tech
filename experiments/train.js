@@ -1,274 +1,321 @@
 "use strict";
 
 var assert = require("assert");
-var Rng = require("../js/rng.js");
 var Const = require("../js/const.js");
+// load order matters: each module captures the ones before it at load time
+require("../js/rng.js");
 var World = require("../js/world.js");
-// sim.js calls into economy and train at reset/step, so they load first
 require("../js/economy.js");
+var Tech = require("../js/tech.js");
+var Trade = require("../js/trade.js");
 var Train = require("../js/train.js");
 var Sim = require("../js/sim.js");
 
 var DT = Const.DT;
 var SEED = 24680;
-var LEG_KM = Const.RING_KM / Const.NODE_N; // mean node spacing
-var MAX_STEPS = 60 * 600;
+var MAX_STEPS = 60 * 900;
 
-// a two-node ring: enough for the state machine, and the leg length is exact
-function lineWorld(a, b) {
-	return {
-		nodeCount: 2,
-		x: Float32Array.of(a, b)
+// a hand-built ring, so every expected answer is known in advance
+function makeWorld(nodes) {
+	var n = nodes.length;
+	var world = {
+		nodeCount: n,
+		ringKm: Const.RING_KM,
+		x: new Float32Array(n),
+		kind: new Int8Array(n),
+		need: new Int8Array(n),
+		rate: new Float32Array(n),
+		fragility: new Float32Array(n),
+		stock: new Float64Array(n * Const.RES_N),
+		cap: new Float32Array(n * Const.RES_N),
+		inflow: new Float32Array(n * Const.RES_N),
+		base: new Float32Array(n * Const.RES_N),
+		price: new Float32Array(n * Const.RES_N),
+		consumed: new Float64Array(n * Const.RES_N),
+		produced: new Float64Array(n * Const.RES_N),
+		overflow: new Float64Array(n * Const.RES_N)
 	};
+	var i;
+	var r;
+	var spec;
+
+	for (i = 0; i < n; i += 1) {
+		spec = nodes[i];
+		world.x[i] = spec.x;
+		world.kind[i] = spec.kind;
+		world.need[i] = spec.need || 0;
+		world.rate[i] = spec.rate || 0;
+		world.fragility[i] = spec.fragility || 1;
+		for (r = 0; r < Const.RES_N; r += 1) {
+			world.cap[i * Const.RES_N + r] = spec.cap || 80;
+			world.base[i * Const.RES_N + r] = spec.base || 10;
+			world.stock[i * Const.RES_N + r] = (spec.stock && spec.stock[r]) || 0;
+		}
+	}
+	return world;
 }
 
-function runLeg(train, world) {
-	var steps = 0;
+var R1 = 1; // recipe bit for resource 0: a consumer whose need mask is 1 takes R1
 
-	while (train.state === Train.CRUISE && steps < MAX_STEPS) {
-		Train.step(train, world, DT);
-		steps += 1;
-	}
-	assert(steps < MAX_STEPS, "the train reaches its waypoint");
-	return train.tripTime;
+// source at 0 holding `srcStock` R1, consumer at `km` needing R1 with an empty yard
+function lineWorld(km, srcStock) {
+	return makeWorld([
+		{ x: 0, kind: World.SRC, stock: [srcStock === undefined ? 50 : srcStock, 0, 0], base: 10 },
+		{ x: km, kind: World.CON, need: R1, rate: 0.01, base: 30, stock: [0, 0, 0] }
+	]);
 }
 
 function freshTrain(wagons) {
-	var train = Train.create();
-
-	if (wagons !== undefined) train.wagons = wagons;
-	return train;
+	return Train.create(Tech.derive(Tech.defaultKnobs()), wagons);
 }
 
-function testMassModel() {
-	var build = Train.getBuild();
-	var train = freshTrain(4);
-	var wagons;
-	var prev = 0;
-	var mass;
-
-	train.cargoUnits = 0;
-	Train.refreshProfile(train);
-	assert.strictEqual(train.mass, build.mLoco + 4 * build.mWagon, "empty consist mass");
-
-	train.cargoUnits = 3;
-	Train.refreshProfile(train);
-	assert.strictEqual(train.mass, build.mLoco + 4 * build.mWagon + 3 * Const.UNIT_T, "cargo adds payload mass");
-
-	train.cargoUnits = 0;
-	for (wagons = Const.WAGON_MIN; wagons <= Const.WAGON_MAX; wagons += 1) {
-		train.wagons = wagons;
-		Train.refreshProfile(train);
-		mass = train.mass;
-		assert(mass > prev, "mass grows with the consist");
-		assert.strictEqual(mass, build.mLoco + wagons * build.mWagon, "mass is loco + wagons");
-		prev = mass;
-	}
-}
-
-function testProfileReachesTheSpeedCap() {
-	var build = Train.getBuild();
-	var train = freshTrain(Const.WAGON_DEFAULT);
-
-	Train.refreshProfile(train);
-	assert(train.profile.T > 0 && train.profile.S > 0, "the accel phase is non-degenerate");
-	assert(Math.abs(train.profile.v - build.vTrack) < 1e-6, "the starting build reaches the track speed");
-	assert(train.profile.S < build.vTrack * train.profile.T, "accelerating covers less than cruising would");
-}
-
-function testWagonsLengthenTheTrip() {
-	var wagons;
-	var prev = 0;
-	var time;
-	var slow;
-	var fast;
-	var ratio;
-
-	for (wagons = Const.WAGON_MIN; wagons <= Const.WAGON_MAX; wagons += 1) {
-		time = runLegTrip(wagons);
-		assert(time > prev, "W=" + wagons + " is slower than W=" + (wagons - 1));
-		prev = time;
-	}
-
-	fast = runLegTrip(4);
-	slow = runLegTrip(8);
-	ratio = slow / fast;
-	assert(ratio > 1.15, "doubling the consist lengthens the trip by more than 15% (got " + ratio.toFixed(3) + ")");
-	console.log("  trip " + LEG_KM.toFixed(2) + " km: W=1 " + runLegTrip(1).toFixed(2)
-		+ " s, W=4 " + fast.toFixed(2) + " s, W=8 " + slow.toFixed(2) + " s (x" + ratio.toFixed(2) + ")");
-}
-
-function runLegTrip(wagons) {
-	var train = freshTrain(wagons);
-	var world = lineWorld(0, LEG_KM);
-
+// the train is parked at node 0: reset runs the arrival there, so it loads first
+function parkAtSource(train, world) {
 	Train.reset(train, world);
-	return runLeg(train, world);
 }
 
-function testEstimateMatchesMeasuredTrips() {
-	var worst = 0;
-	var worstAt = "";
-	var wagons;
-	var km;
-	var train = freshTrain();
-	var world;
-	var measured;
-	var planned;
-	var error;
+function stepUntil(train, world, done) {
+	var steps = 0;
 
-	for (wagons = Const.WAGON_MIN; wagons <= Const.WAGON_MAX; wagons += 1) {
-		train.wagons = wagons;
-		for (km = 0.5; km <= 30; km *= 1.5) {
-			world = lineWorld(0, km);
-			Train.reset(train, world);
-			planned = train.tripEstimate;
-			measured = runLeg(train, world);
-			error = Math.abs(planned - measured) / measured;
-			assert(error < 0.1, "W=" + wagons + " L=" + km.toFixed(2) + ": estimate off by " + (error * 100).toFixed(1) + "%");
-			if (error > worst) {
-				worst = error;
-				worstAt = "W=" + wagons + " L=" + km.toFixed(2) + " km";
+	while (!done() && steps < MAX_STEPS) {
+		Train.step(train, world, DT);
+		steps += 1;
+	}
+	assert(steps < MAX_STEPS, "the awaited state is reached");
+	return steps;
+}
+
+function simUntil(sim, done) {
+	var steps = 0;
+
+	while (!done() && steps < MAX_STEPS) {
+		Sim.step(sim, DT);
+		steps += 1;
+	}
+	assert(steps < MAX_STEPS, "the awaited state is reached");
+	return steps;
+}
+
+function isDwelling(train) {
+	return train.state === Train.DWELL;
+}
+
+function testOneWayNeverReverses() {
+	var s;
+	var i;
+	var sim;
+	var train;
+	var before;
+	var step;
+
+	for (s = 0; s < 6; s += 1) {
+		sim = Sim.create(SEED + s);
+		train = sim.trains[0];
+		for (i = 0; i < 60 * 240; i += 1) {
+			before = train.x;
+			Sim.step(sim, DT);
+			// World.wrap keeps x in [0, RING_KM): a backward move would show as a
+			// step of almost a whole lap, so a short forward step covers both claims
+			step = World.wrap(train.x - before);
+			assert(step < 0.5, "forward and continuous (seed " + (SEED + s) + ")");
+		}
+	}
+}
+
+function testStopsOnlyWhereTradeIsWanted() {
+	var s;
+	var i;
+	var j;
+	var sim;
+	var train;
+	var world;
+	var wanted = [];
+	var before;
+	var ds;
+	var prevDwell;
+	var stops = 0;
+
+	for (s = 0; s < 8; s += 1) {
+		sim = Sim.create(SEED + 100 + s);
+		train = sim.trains[0];
+		world = sim.world;
+		prevDwell = false;
+		for (i = 0; i < 60 * 300; i += 1) {
+			// judged before the step, so a node is never excused by the step's own transfers
+			for (j = 0; j < world.nodeCount; j += 1) wanted[j] = Trade.wantsStop(train, world, j);
+			before = train.x;
+			Sim.step(sim, DT);
+			ds = World.wrap(train.x - before);
+			if (isDwelling(train) && !prevDwell) stops += 1;
+			prevDwell = isDwelling(train);
+			for (j = 0; j < world.nodeCount; j += 1) {
+				if (wanted[j] && passedInside(world.x[j], before, ds) && train.at !== j) {
+					assert.fail("a wanted node was passed (seed " + (SEED + 100 + s) + ", node " + j + ")");
+				}
 			}
 		}
 	}
-	console.log("  worst trip estimate error: " + (worst * 100).toFixed(2) + "% at " + worstAt);
+	assert(stops >= 20, "the loop actually stops (got " + stops + ")");
 }
 
-function testArrivalAndDwell() {
-	var world = lineWorld(0, LEG_KM);
-	var train = freshTrain();
+// node at x lies in the (before, before + ds] arc this step covered
+function passedInside(x, before, ds) {
+	var d = World.wrap(x - before);
 
-	Train.reset(train, world);
-	runLeg(train, world);
-
-	assert.strictEqual(train.v, 0, "arrival captures the waypoint by stopping");
-	assert.strictEqual(train.x, world.x[1], "arrival lands exactly on the waypoint");
-	assert.strictEqual(train.at, 1, "the train knows where it stands");
-	assert.strictEqual(train.state, Train.DWELL, "arrival starts the dwell");
-	assert(Math.abs(train.dwellLeft - Const.DWELL_S) < 1e-9, "dwell starts at DWELL_S");
-	assert.strictEqual(train.lastTripTime, train.tripTime, "arrival freezes the reported trip");
-	assert(Math.abs(train.lastTripKm - LEG_KM) < 1e-6, "the reported leg is the one just run");
-
-	// dwell counts down, then the waypoints swap and the train departs
-	var guard = 0;
-	while (train.state === Train.DWELL && guard < MAX_STEPS) {
-		Train.step(train, world, DT);
-		guard += 1;
-	}
-	assert.strictEqual(train.state, Train.CRUISE, "the dwell ends");
-	assert.strictEqual(train.from, 1, "the shuttle partner is the node just reached");
-	assert.strictEqual(train.to, 0, "the train heads back");
-	assert.strictEqual(train.dir, -1, "and reverses direction");
-	assert(train.dwellLeft <= 0, "the dwell clock is spent");
-	assert(train.lastTripTime > 0, "the reported trip survives the departure");
-	assert.strictEqual(train.tripTime, 0, "the new leg starts a fresh clock");
-
-	// half a dwell before the first step is still inside the dwell
-	Train.reset(train, world);
-	runLeg(train, world);
-	Train.step(train, world, Const.DWELL_S * 0.5);
-	assert.strictEqual(train.state, Train.DWELL, "a short step does not end the dwell");
+	return d > 0 && d <= ds;
 }
 
-function testClearRouteParksTheTrain() {
-	var train = freshTrain();
-	var world = lineWorld(0, LEG_KM);
+function testStopsAreExactAndBrakingStaysBounded() {
+	var world = lineWorld(20);
+	var train = freshTrain(4);
+	var prevV;
+	var peak = 0;
+	var steps;
 
-	Train.reset(train, world);
-	Train.setDestination(train, world, train.at);
-	assert.strictEqual(train.state, Train.WAIT, "clicking the node the train stands on parks it");
-	assert.strictEqual(train.to, -1, "no destination");
-
-	Train.step(train, world, DT);
-	assert.strictEqual(train.v, 0, "a parked train does not move");
-
-	// routing from a parked train shuttles between the two nodes
-	Train.setDestination(train, world, 1);
-	assert.strictEqual(train.state, Train.CRUISE, "routing departs at once");
-	assert.strictEqual(train.from, 0, "from where it stood");
-	assert.strictEqual(train.to, 1, "to the clicked node");
-}
-
-function testRetargetWhileCruising() {
-	var train = freshTrain();
-	var world = { nodeCount: 3, x: Float32Array.of(0, 10, 40) };
-
-	Train.reset(train, world);
-	assert.strictEqual(train.to, 1, "reset routes to the nearest node");
-
-	Train.setDestination(train, world, 2);
-	assert.strictEqual(train.to, 2, "a click retargets a running train");
-	assert.strictEqual(train.from, 0, "and keeps the node it came from");
-	assert.strictEqual(train.at, -1, "a running train has no current node");
-}
-
-function testAntipodalLegTakesIncreasingX() {
-	var train = freshTrain();
-	var world = lineWorld(0, Const.RING_KM * 0.5);
-
-	Train.reset(train, world);
-	assert.strictEqual(train.dir, 1, "a tie takes the increasing-x arc");
-	assert(Math.abs(train.tripKm - Const.RING_KM * 0.5) < 1e-6, "half a ring either way");
-}
-
-function testSeamCrossingLegMatchesItsMirror() {
-	var flat = freshTrain();
-	var wrap = freshTrain();
-	var flatWorld = lineWorld(10, 10 + LEG_KM);
-	var wrapWorld = lineWorld(Const.RING_KM - 2, LEG_KM - 2);
-	var flatTime;
-	var wrapTime;
-
-	Train.reset(flat, flatWorld);
-	Train.reset(wrap, wrapWorld);
-	assert.strictEqual(wrap.dir, 1, "the leg crosses x = 0 going up");
-
-	flatTime = runLeg(flat, flatWorld);
-	wrapTime = runLeg(wrap, wrapWorld);
-
-	assert(Math.abs(flatTime - wrapTime) < 1e-3, "a seam-crossing trip takes the same time as its mirror");
-	assert(Math.abs(flat.tripEstimate - wrap.tripEstimate) < 1e-3, "and is planned identically");
-	assert.strictEqual(wrap.x, wrapWorld.x[1], "it lands on the far node");
-}
-
-function testSpeedStaysInsideItsBounds() {
-	var sim = Sim.create(SEED);
-	var train = sim.trains[0];
-	var build = Train.getBuild();
-	var i;
-
-	for (i = 0; i < 60 * 120; i += 1) {
-		Sim.step(sim, DT);
-		assert(train.v >= 0, "speed never goes negative");
-		assert(train.v <= build.vTrack + 1e-9, "speed never exceeds the track limit");
-		assert(Number.isFinite(train.x) && train.x >= 0 && train.x < Const.RING_KM, "position stays on the ring");
-	}
-}
-
-function testStalledBuildCannotDepart() {
-	var build = Train.getBuild();
-	var train = freshTrain();
-	var world = lineWorld(0, LEG_KM);
-	var i;
-
-	Train.setBuild({
-		mLoco: build.mLoco,
-		mWagon: build.mWagon,
-		vTrack: build.vTrack,
-		power: 0,
-		cRR: build.cRR,
-		fTrac: 0
+	parkAtSource(train, world);
+	assert.strictEqual(train.cargoUnits, 4, "a rich source fills every wagon while the margin pays");
+	stepUntil(train, world, function () {
+		return train.state === Train.CRUISE;
 	});
-	Train.reset(train, world);
-	assert.strictEqual(train.tripEstimate, Infinity, "a train that cannot move plans an infinite trip");
+	for (steps = 0; steps < MAX_STEPS && !isDwelling(train); steps += 1) {
+		prevV = train.v;
+		Train.step(train, world, DT);
+		if (train.state === Train.CRUISE && train.v < prevV) peak = Math.max(peak, (prevV - train.v) / DT);
+	}
+	assert(steps < MAX_STEPS, "the train reaches the consumer");
+	assert.strictEqual(train.at, 1, "the train stopped at the consumer");
+	assert.strictEqual(train.x, world.x[1], "captured exactly on the node");
+	assert.strictEqual(train.v, 0, "and at rest");
+	assert(peak <= Const.BRAKE_DECEL * 1.05, "a clean approach brakes at the service rate (peak " + peak.toFixed(3) + ")");
+}
+
+function testLateStopStillArrivesExactly() {
+	// a consumer appears inside the braking distance of a train already at speed
+	var world = lineWorld(40);
+	var train = freshTrain(4);
+
+	parkAtSource(train, world);
+	stepUntil(train, world, function () {
+		return train.state === Train.CRUISE;
+	});
+	stepUntil(train, world, function () {
+		return train.v > 1.2 && train.x > 5;
+	});
+	world.x[1] = World.wrap(train.x + 0.9);
+	stepUntil(train, world, function () {
+		return isDwelling(train);
+	});
+	assert.strictEqual(train.x, world.x[1], "a late stop is still reached exactly");
+}
+
+function testNoStopRunsAtTrackSpeed() {
+	var world = makeWorld([
+		{ x: 0, kind: World.CON, need: R1, base: 20, stock: [0, 0, 0] },
+		{ x: 20, kind: World.CON, need: R1, base: 20, stock: [0, 0, 0] },
+		{ x: 40, kind: World.SRC, base: 10, stock: [0, 0, 0] }
+	]);
+	var train = freshTrain(4);
+	var stops = 0;
+	var prevDwell = false;
+	var i;
+
+	parkAtSource(train, world);
+	for (i = 0; i < 60 * 300; i += 1) {
+		Train.step(train, world, DT);
+		if (isDwelling(train) && !prevDwell) stops += 1;
+		prevDwell = isDwelling(train);
+	}
+	assert.strictEqual(stops, 0, "no node wants the train, so it never stops");
+	assert(Math.abs(train.v - train.build.vTrack) < 1e-9, "it cruises at the track speed");
+}
+
+function testTransferDwellMatchesUnits() {
+	var world = lineWorld(12);
+	var train = freshTrain(3);
+
+	parkAtSource(train, world);
+	assert.strictEqual(train.cargoUnits, 3, "three wagons, three units");
+	assert(Math.abs(train.dwellTotal - 3 / Const.UNITS_PER_S) < 1e-9, "load dwell = units / UNITS_PER_S");
+	stepUntil(train, world, function () {
+		return isDwelling(train) && train.at === 1;
+	});
+	assert.strictEqual(train.cargoUnits, 0, "the consumer took every unit");
+	assert(Math.abs(train.dwellTotal - 3 / Const.UNITS_PER_S) < 1e-9, "unload dwell = units / UNITS_PER_S");
+}
+
+function testSourceWithFewUnitsLoadsFewUnits() {
+	var world = lineWorld(12, 2);
+	var train = freshTrain(6);
+
+	parkAtSource(train, world);
+	assert.strictEqual(train.cargoUnits, 2, "the source has two units to give");
+	assert.strictEqual(world.stock[0], 0, "and they all left the yard");
+}
+
+function testStalledBuildSitsAtZero() {
+	var world = lineWorld(12);
+	var train = freshTrain(4);
+	var build = Tech.derive(Tech.defaultKnobs());
+	var i;
+
+	build.power = 0;
+	build.fTrac = 0;
+	Train.setBuild(train, build);
+	parkAtSource(train, world);
 	for (i = 0; i < 600; i += 1) Train.step(train, world, DT);
 	assert.strictEqual(train.v, 0, "no traction, no motion");
+	assert.strictEqual(train.x, world.x[0], "the train never leaves its node");
 	assert.strictEqual(train.state, Train.CRUISE, "it waits for a route it can run");
+}
 
-	Train.setBuild(build);
-	Train.reset(train, world);
-	assert(train.tripEstimate > 0 && train.tripEstimate < Infinity, "restoring the build restores the plan");
+function testSetWagonsNeverDropsCargo() {
+	var world = lineWorld(12);
+	var train = freshTrain(4);
+
+	parkAtSource(train, world);
+	assert.strictEqual(train.cargoUnits, 4, "four wagons loaded");
+	Train.setWagons(train, 1);
+	assert.strictEqual(train.wagons, 4, "a loaded consist cannot shrink below its cargo");
+	Train.setWagons(train, 8);
+	assert.strictEqual(train.wagons, 8, "growing is always allowed");
+	assert.strictEqual(train.cargoUnits, 4, "cargo is untouched by the change");
+}
+
+function testSetWagonsFloorFollowsTheHighestLoadedWagon() {
+	var world = lineWorld(12, 3);
+	var train = freshTrain(6);
+
+	parkAtSource(train, world);
+	assert.strictEqual(train.cargoUnits, 3, "three units loaded into the first wagons");
+	Train.setWagons(train, 2);
+	assert.strictEqual(train.wagons, 3, "the floor is the highest loaded wagon index + 1");
+}
+
+function testKnobChangeNeverTeleports() {
+	var sim = Sim.create(SEED + 7);
+	var train = sim.trains[0];
+	var before;
+	var prevV;
+	var step;
+	var i;
+
+	simUntil(sim, function () {
+		return train.state === Train.CRUISE && train.v > 1.2;
+	});
+	before = train.x;
+	prevV = train.v;
+	// a gauge change slows the track: the train must brake down, not jump to the new speed
+	Sim.setKnob(sim, Tech.GAUGE, 0.05);
+	Sim.step(sim, DT);
+	step = World.wrap(train.x - before);
+	assert(step < 0.05, "the step after a knob change moves at most a few centimetres");
+	assert(train.v <= prevV + 1e-9, "a slower track never raises speed");
+	// the brake takes a moment to bring the speed down; once it has, the cap holds
+	for (i = 0; i < 60 * 5; i += 1) Sim.step(sim, DT);
+	for (i = 0; i < 60 * 120; i += 1) {
+		Sim.step(sim, DT);
+		assert(train.v <= train.build.vTrack + 1e-9, "speed is capped by the new track speed");
+	}
 }
 
 function testDeterminism() {
@@ -282,49 +329,21 @@ function testDeterminism() {
 	}
 	assert.strictEqual(a.trains[0].x, b.trains[0].x, "same steps, same position");
 	assert.strictEqual(a.trains[0].v, b.trains[0].v, "same steps, same speed");
-	assert.strictEqual(a.trains[0].state, b.trains[0].state, "same steps, same state");
-	assert.strictEqual(a.trains[0].tripTime, b.trains[0].tripTime, "same steps, same trip clock");
-	assert.strictEqual(a.trains[0].at, b.trains[0].at, "same steps, same waypoint");
+	assert.strictEqual(a.trains[0].cash, b.trains[0].cash, "same steps, same cash");
+	assert.strictEqual(a.trains[0].cargoUnits, b.trains[0].cargoUnits, "same steps, same cargo");
+	assert.strictEqual(a.netRate, b.netRate, "same steps, same net rate");
 }
 
-function testTrainRunsTheSeededWorld() {
-	var sim = Sim.create(SEED);
-	var train = sim.trains[0];
-	var arrivals = 0;
-	var prevState = train.state;
-	var i;
-	var j;
-	var distance;
-
-	for (i = 0; i < 60 * 300; i += 1) {
-		Sim.step(sim, DT);
-		if (train.state === Train.DWELL && prevState === Train.CRUISE) arrivals += 1;
-		prevState = train.state;
-	}
-	assert(arrivals >= 10, "the train completes trips (got " + arrivals + ")");
-	assert(train.to >= 0 && train.to < sim.world.nodeCount, "the destination is a real node");
-
-	// every other node is a legal destination, along the shorter arc
-	for (j = 0; j < sim.world.nodeCount; j += 1) {
-		if (j === train.at || j === train.from) continue;
-		Train.setDestination(train, sim.world, j);
-		distance = World.distance(train.x, sim.world.x[j]);
-		assert(Math.abs(train.tripKm - distance) < 1e-3, "the leg length is the ring distance to node " + j);
-		assert(train.tripEstimate > 0 && train.tripEstimate < Infinity, "node " + j + " gets a finite plan");
-	}
-}
-
-testMassModel();
-testProfileReachesTheSpeedCap();
-testWagonsLengthenTheTrip();
-testEstimateMatchesMeasuredTrips();
-testArrivalAndDwell();
-testClearRouteParksTheTrain();
-testRetargetWhileCruising();
-testAntipodalLegTakesIncreasingX();
-testSeamCrossingLegMatchesItsMirror();
-testSpeedStaysInsideItsBounds();
-testStalledBuildCannotDepart();
+testOneWayNeverReverses();
+testStopsOnlyWhereTradeIsWanted();
+testStopsAreExactAndBrakingStaysBounded();
+testLateStopStillArrivesExactly();
+testNoStopRunsAtTrackSpeed();
+testTransferDwellMatchesUnits();
+testSourceWithFewUnitsLoadsFewUnits();
+testStalledBuildSitsAtZero();
+testSetWagonsNeverDropsCargo();
+testSetWagonsFloorFollowsTheHighestLoadedWagon();
+testKnobChangeNeverTeleports();
 testDeterminism();
-testTrainRunsTheSeededWorld();
-console.log("Train checks passed: mass model, wagon sweep, trip estimate, state machine, seam, speed bounds, determinism.");
+console.log("Train checks passed: one-way loop, wanted-only stops, exact braked stops, late stops, no-stop cruise, transfer dwell, wagon floor, knob change, determinism.");

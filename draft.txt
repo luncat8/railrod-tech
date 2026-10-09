@@ -45,3 +45,21 @@ competitor train(s) - use same line. trains can push each other or choose to mov
 improve path and tactics of bot.
 
 heightmap generator, improve tactics according to path-find using heightmap and speed and torque characteristics
+
+
+
+### trading and profit (load/unload against the price curves, cash, profit/s EMA, transfer-driven dwell, capex on route length, mass-balance check).
+
+but. i think we should simplify and change plan for now. extract this plan and code to separate deferred plan file.
+
+reimplement movement rule as follow:
+
+- train move only in right direction and stop at stations that have/want something to trade with train (and train have storage place, etc).
+
+- train have some big amount of money to trade, we interesting only in change per time to see efficiency
+
+i think this will simplify and make more aasy to concentrate development on more important goals.
+
+- player can reconfigure train and railroad, as draft say.
+
+note main goal of this game prototype is dynamic train upgrade/configuration and good system for it: to show that it is not worth to mount on train enormous engine and make 4m gauge, but there is some realistic optimum. Good if you can plan possible train adjustments and how real optimum can be achieved emergent during simulation.

@@ -1,7 +1,7 @@
 "use strict";
 
 // Boot smoke test: stub just enough DOM for main.js to init and run frames
-// headlessly, then exercise hover, pause, speed, and seed changes.
+// headlessly, then exercise hover, pause, speed, seed, and build controls.
 
 var assert = require("assert");
 
@@ -24,6 +24,7 @@ function fakeElement(id) {
 	var el = {
 		id: id,
 		value: "",
+		dataset: {},
 		textContent: "",
 		innerHTML: "",
 		hidden: true,
@@ -81,6 +82,8 @@ require("../js/rng.js");
 require("../js/const.js");
 require("../js/world.js");
 require("../js/economy.js");
+require("../js/tech.js");
+require("../js/trade.js");
 require("../js/train.js");
 require("../js/sim.js");
 require("../js/clock.js");
@@ -96,6 +99,18 @@ var i;
 function frame() {
 	t += 16.7;
 	rafCallback(t);
+}
+
+// a control's input event, the way the browser delivers it
+function input(id, value) {
+	var el = elements[id];
+
+	el.value = String(value);
+	el.handlers["input"][0]({ target: el });
+}
+
+function readNumber(id) {
+	return Number(elements[id].textContent);
 }
 
 assert.strictEqual(typeof rafCallback, "function", "main loop registered");
@@ -122,6 +137,10 @@ assert.strictEqual(label.hidden, true, "hover miss hides the label");
 canvas.handlers["mouseleave"][0]();
 assert.strictEqual(label.hidden, true, "mouseleave keeps the label hidden");
 
+// click-to-route is gone: the loop is the only movement, so a click does nothing
+assert.strictEqual(canvas.handlers["click"], undefined, "no click routing is bound");
+assert(elements["trip-value"] === undefined, "no trip telemetry is published");
+
 Main.setSpeed(4);
 Main.togglePause();
 Main.togglePause();
@@ -130,50 +149,61 @@ frame();
 canvas.handlers["mousemove"][0]({ clientX: 600, clientY: 500 });
 assert.strictEqual(label.hidden, false, "label works after a seed change");
 
-// the wagons control resizes the consist, through the input event and directly
-elements["wagons-input"].value = "7";
-elements["wagons-input"].handlers["input"][0]();
+// wagons: the slider resizes the consist, through the input event and directly
+input("wagons-input", 7);
 assert.strictEqual(elements["wagons-value"].textContent, "7", "the wagons slider resizes the consist");
 Main.setWagons(2);
 assert.strictEqual(elements["wagons-value"].textContent, "2", "the wagons field reports the consist");
+Main.setWagons(4);
 
-// routing: hover finds node 1's column, clicking it sends the train there
-var RR = globalThis.RR;
-var ringKm = RR.Const.RING_KM;
-var trackY = Math.round(700 * 0.74);
-var routed = RR.World.generate(RR.Rng.create(424242));
-var pxPerKm = 1200 / RR.Const.KM_VISIBLE;
-var offset = routed.x[1] + RR.Render.copyOffset(routed.x[1], routed.x[0], ringKm) - routed.x[0];
-var nodeOneX = 600 + offset * pxPerKm;
+// build knobs: each slider reads in physical units and moves the capex telemetry
+input("gauge-input", 1);
+assert.strictEqual(elements["gauge-value"].textContent, "4.00 M", "the gauge slider reads 4.00 m at the top");
+input("gauge-input", 0.5);
+assert.strictEqual(elements["gauge-value"].textContent, "2.30 M", "the gauge slider reads 2.30 m at the middle");
+input("wheel-input", 0);
+assert.strictEqual(elements["wheel-value"].textContent, "0.40 M", "the wheel slider reads 0.40 m at the bottom");
+input("wheel-input", 0.5);
+assert.strictEqual(elements["wheel-value"].textContent, "1.00 M", "the wheel slider reads 1.00 m at the middle");
+input("engine-input", 0.5);
+assert.strictEqual(elements["engine-value"].textContent, "40 T", "the engine slider reads 40 t at the middle");
 
-Main.setSeed(424242);
 frame();
-canvas.handlers["mousemove"][0]({ clientX: nodeOneX, clientY: trackY - 20 });
-assert.strictEqual(label.hidden, false, "node 1 is reachable on screen");
-assert(label.innerHTML.indexOf("NODE 1") !== -1, "the hovered column is node 1");
+var capexBefore = readNumber("capex-value");
+input("gauge-input", 1);
+frame();
+assert(readNumber("capex-value") < capexBefore, "a wider gauge raises the capex charge (more negative)");
+input("gauge-input", 0.5);
+frame();
+assert.strictEqual(readNumber("capex-value"), capexBefore, "setting the knob back restores the capex charge");
 
-canvas.handlers["click"][0]({ clientX: nodeOneX, clientY: trackY - 20 });
-for (i = 0; i < 20; i += 1) frame();
-assert(elements["trip-value"].textContent.indexOf("/") !== -1, "routing publishes a trip plan");
+input("engine-input", 1);
+assert.strictEqual(elements["engine-value"].textContent, "60 T", "the largest engine is 60 t (m_loco = 40 * (0.5 + e))");
+input("engine-input", 0.5);
 
-for (i = 0; i < 400; i += 1) frame();
-var trip = elements["trip-value"].textContent.split("/");
-var measured = Number(trip[0]);
-var planned = Number(trip[1]);
-assert(
-	/^\d+\.\d+\/\d+\.\d+$/.test(elements["trip-value"].textContent),
-	"the finished trip reports measured / planned seconds (got " + elements["trip-value"].textContent + ")"
-);
-assert(measured > 0, "and a positive measured duration");
-assert(Math.abs(measured - planned) / planned < 0.1, "measured within 10% of the plan");
+// telemetry formats: net and profit are signed rates, cargo reads loaded/wagons
+frame();
+assert(/^[+-]?\d+\.\d\d$/.test(elements["net-value"].textContent), "net reads as a signed rate");
+assert(/^[+-]?\d+\.\d\d$/.test(elements["profit-value"].textContent), "profit reads as a signed rate");
+assert(/^\d+\/\d+$/.test(elements["cargo-value"].textContent), "cargo reads loaded/wagons");
+
+// the loop runs: over a few sim minutes the cargo changes, so the train has traded
+var cargoSeen = {};
+var net;
+Main.setSeed(424242);
+Main.setSpeed(8);
+for (i = 0; i < 2000; i += 1) {
+	frame();
+	cargoSeen[elements["cargo-value"].textContent] = true;
+}
+assert(Object.keys(cargoSeen).length >= 2, "the train loads and unloads on the loop");
+net = elements["net-value"].textContent;
+assert(/^[+-]?\d+\.\d\d$/.test(net), "net still reads as a signed rate after running");
 assert(Number(elements["train-speed-value"].textContent) >= 0, "train speed telemetry reads out");
 
-// clicking the node the train now stands on parks it and clears the trip
+// a parked train at seed reset reads zero speed on the first telemetry tick
 Main.setSeed(424242);
 frame();
-canvas.handlers["click"][0]({ clientX: 600, clientY: trackY - 20 });
-for (i = 0; i < 40; i += 1) frame();
-assert.strictEqual(elements["trip-value"].textContent, "—", "a parked train shows no trip");
-assert.strictEqual(elements["train-speed-value"].textContent, "0.00", "a parked train reads zero speed");
+assert.strictEqual(elements["train-speed-value"].textContent, "0.00", "a train parked at the source reads zero speed");
 
-console.log("Boot checks passed: page boots headless, frames tick the economy, hover label shows/hides, wagons and routing respond.");
+console.log("Boot checks passed: page boots headless, frames tick the economy, hover label, click routing removed, wagons and knob sliders respond, capex and cargo telemetry update, the loop trades.");

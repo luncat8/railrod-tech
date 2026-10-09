@@ -97,13 +97,16 @@
 			need: new Int8Array(n),
 			rate: new Float32Array(n),
 			fragility: new Float32Array(n),
-			stock: new Float32Array(n * res),
+			// stock and the ledger are float64: a float32 running sum drifts by a
+			// few units over an hour of trade, and the mass balance must close exactly
+			stock: new Float64Array(n * res),
 			cap: new Float32Array(n * res),
 			inflow: new Float32Array(n * res),
 			base: new Float32Array(n * res),
 			price: new Float32Array(n * res),
-			consumed: new Float32Array(n * res),
-			overflow: new Float32Array(n * res)
+			consumed: new Float64Array(n * res),
+			produced: new Float64Array(n * res),
+			overflow: new Float64Array(n * res)
 		};
 		var i;
 

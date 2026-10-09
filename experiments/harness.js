@@ -4,8 +4,10 @@ var assert = require("assert");
 var Rng = require("../js/rng.js");
 var Const = require("../js/const.js");
 var World = require("../js/world.js");
-// sim.js calls into economy and train at reset/step, so they load first
+// sim.js calls into economy and train at reset/step, so they load first, in dependency order
 require("../js/economy.js");
+require("../js/tech.js");
+require("../js/trade.js");
 require("../js/train.js");
 var Sim = require("../js/sim.js");
 var Clock = require("../js/clock.js");
@@ -54,8 +56,10 @@ function testSpeedIndependentDeterminism() {
 	assert.strictEqual(a.x, b.x, "train position matches across speeds");
 	assert.strictEqual(a.v, b.v, "train speed matches across speeds");
 	assert.strictEqual(a.state, b.state, "train state matches across speeds");
-	assert.strictEqual(a.at, b.at, "train waypoint matches across speeds");
-	assert.strictEqual(a.tripTime, b.tripTime, "trip clock matches across speeds");
+	assert.strictEqual(a.at, b.at, "train stop matches across speeds");
+	assert.strictEqual(a.cash, b.cash, "train cash matches across speeds");
+	assert.strictEqual(a.cargoUnits, b.cargoUnits, "train cargo matches across speeds");
+	assert.strictEqual(normal.netRate, fast.netRate, "net rate matches across speeds");
 	assert.strictEqual(stockChecksum(normal.world), stockChecksum(fast.world), "economy matches across speeds");
 }
 
@@ -82,9 +86,10 @@ function testResetReusesAndRestartsTheStream() {
 	assert.deepStrictEqual(Array.from(sim.world.x), xAfterCreate, "reset regenerates the identical world");
 	assert.strictEqual(sim.steps, 0);
 	assert.strictEqual(sim.time, 0);
+	assert.strictEqual(sim.trains[0].cash, Sim.create(SEED).trains[0].cash, "reset restarts the money ledger");
 }
 
 testSpeedIndependentDeterminism();
 testStepCapAndDroppedTime();
 testResetReusesAndRestartsTheStream();
-console.log("Harness checks passed: deterministic speed schedules, step cap, dropped-time accounting, train state, and seed reset.");
+console.log("Harness checks passed: deterministic speed schedules, step cap, dropped-time accounting, train and money state, and seed reset.");

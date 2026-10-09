@@ -130,17 +130,6 @@
 		context.stroke();
 	}
 
-	// the two ends of the shuttle line, marked on the ground under the node
-	function drawWaypointMark(view, train, i, sx) {
-		var context = view.context;
-
-		if (i === train.to) context.fillStyle = TRAIN_BODY;
-		else if (i === train.from) context.fillStyle = TRAIN_RAIL;
-		else return;
-
-		context.fillRect(sx - 10, view.trackY + 8, 20, 2);
-	}
-
 	function drawNode(view, sim, i) {
 		var context = view.context;
 		var world = sim.world;
@@ -155,7 +144,6 @@
 		context.fillStyle = TIE;
 		context.fillRect(sx - 16, view.trackY - 2, 32, 2);
 		drawYardBars(view, world, i, sx);
-		drawWaypointMark(view, sim.trains[0], i, sx);
 	}
 
 	// three yard bars above the node, one per resource, each with a price tick
@@ -190,34 +178,40 @@
 		return (LOCO_W + wagons * WAGON_PITCH) * 0.5;
 	}
 
-	// loco + W wagon frames, drawn behind the loco along the direction of travel
+	// one wagon body; an empty wagon shows a hollow frame, a loaded one its cargo colour
+	function drawWagon(view, wx, top, color, cargo) {
+		var context = view.context;
+
+		context.fillStyle = color;
+		context.fillRect(wx, top, WAGON_W, 10);
+		context.fillStyle = cargo < 0 ? SKY : C.RES_COLORS[cargo];
+		context.fillRect(wx + 2, top + 2, WAGON_W - 4, 6);
+	}
+
+	// the train runs +x, so the loco leads on the right and wagons trail to the left
 	function drawConsist(view, train, sx, color) {
 		var context = view.context;
 		var half = consistHalf(train.wagons);
-		var head = train.dir > 0 ? sx + half - LOCO_W : sx - half;
-		var wx = train.dir > 0 ? head - WAGON_PITCH : head + LOCO_W;
-		var step = train.dir > 0 ? -WAGON_PITCH : WAGON_PITCH;
+		var head = sx + half - LOCO_W;
+		var wx = head - WAGON_PITCH;
 		var top = view.trackY - 12;
-		var j;
+		var w;
 
 		context.fillStyle = color;
 		context.fillRect(head, view.trackY - 14, LOCO_W, 12);
-		context.fillRect(train.dir > 0 ? head + LOCO_W - 9 : head, view.trackY - 22, 9, 8);
-		for (j = 0; j < train.wagons; j += 1) {
-			context.fillRect(wx, top, WAGON_W, 10);
-			context.fillStyle = SKY;
-			context.fillRect(wx + 2, top + 2, WAGON_W - 4, 6);
-			context.fillStyle = color;
-			wx += step;
+		context.fillRect(head + LOCO_W - 9, view.trackY - 22, 9, 8);
+		for (w = 0; w < train.wagons; w += 1) {
+			drawWagon(view, wx, top, color, train.cargo[w]);
+			wx -= WAGON_PITCH;
 		}
 		context.fillRect(sx - half - 2, view.trackY - 4, 2 * half + 4, 3);
 	}
 
-	// dwell progress above the consist; 0.1.4 replaces it with transfer counts
+	// dwell progress above the consist: the transfer time the stop needs
 	function drawDwell(view, train, sx) {
 		var context = view.context;
 		var half = consistHalf(train.wagons);
-		var done = 1 - train.dwellLeft / C.DWELL_S;
+		var done = 1 - train.dwellLeft / train.dwellTotal;
 		var top = view.trackY - 30;
 
 		if (done < 0) done = 0;

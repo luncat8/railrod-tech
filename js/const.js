@@ -46,10 +46,12 @@
 		// resources: R1 amber, R2 slate-blue, R3 teal
 		RES_COLORS: ["#d9b978", "#7f9fc4", "#63c0ae"],
 
-		// train: knobs fixed at the starting build, 0.1.6 wires live sliders
+		// build knobs: g gauge, d wheel, e engine; each in [0, 1]
 		KNOB_G: 0.5,
 		KNOB_D: 0.5,
 		KNOB_E: 0.5,
+		KNOB_MIN: 0,
+		KNOB_MAX: 1,
 		ML: 40,          // m_loco  = ML * (0.5 + e)
 		M0: 18,          // m_wagon = M0 * (0.8 + 0.4g) + MW * d*d
 		MW: 12,
@@ -67,9 +69,19 @@
 		WAGON_MIN: 1,
 		WAGON_MAX: 8,
 		WAGON_DEFAULT: 4,
-		DWELL_S: 1.5,    // stop time at a waypoint, s (0.1.4: transfer time)
-		PROFILE_DT: 1 / 240,
-		PROFILE_MAX_S: 120,
+		BRAKE_DECEL: 0.6,   // km/s², constant service braking for stops
+		UNITS_PER_S: 2,     // transfers per second across the whole train
+		STOP_EPS_KM: 0.01, // the node just left counts as behind until the train is this far clear
+		// money: unbounded, so only rates count. capex is amortised, not charged
+		PROFIT_TAU_S: 60,  // about one loop: shorter windows read the lumps of trade, not the rate
+		AMORT_S: 1200,     // horizon over which the build's value is recovered, s
+		K_TRACK: 10,       // track cr/km at g = 0
+		CW: 60,            // wagon cr at g = d = 0
+		CL: 300,           // loco cr at e = 0
+		GAUGE_MIN_M: 0.6,  // readouts only: gauge = 0.6 + 3.4g m
+		GAUGE_MAX_M: 4.0,
+		WHEEL_MIN_M: 0.4,  // readouts only: wheel = 0.4 + 1.2d m
+		WHEEL_MAX_M: 1.6,
 
 		// camera / view
 		CAMERA_FOLLOW: 2.5,

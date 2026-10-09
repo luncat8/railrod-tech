@@ -38,14 +38,6 @@
 		RR.UI.showNodeLabel(sim.world, i, event.clientX, event.clientY);
 	}
 
-	// one click sends the train to that node; it shuttles with where it came from
-	function onClick(event) {
-		var i = nodeAt(event);
-
-		if (i < 0) return;
-		RR.Train.setDestination(sim.trains[0], sim.world, i);
-	}
-
 	function frame(timestamp) {
 		var elapsed = 0;
 		var fpsInterval = timestamp - fpsWindowTimestamp;
@@ -79,11 +71,10 @@
 		sim = RR.Sim.create(RR.Const.DEFAULT_SEED);
 		clock = RR.Clock.create();
 		view = RR.Render.create(document.getElementById("c"));
-		RR.UI.bind(Main, sim.seed, speed, sim.trains[0].wagons);
+		RR.UI.bind(Main, sim, speed);
 		root.addEventListener("resize", onResize);
 		view.canvas.addEventListener("mousemove", onMouseMove);
 		view.canvas.addEventListener("mouseleave", onMouseLeave);
-		view.canvas.addEventListener("click", onClick);
 		onResize();
 		RR.Render.draw(view, sim, paused, 0);
 		root.requestAnimationFrame(frame);
@@ -95,6 +86,7 @@
 		RR.Clock.reset(clock);
 		RR.Render.snapCamera(view, sim);
 		RR.UI.setSeed(sim.seed);
+		RR.UI.setBuild(sim);
 		RR.UI.updateTelemetry(measuredFps, sim, clock);
 	};
 
@@ -116,8 +108,16 @@
 
 	Main.setWagons = function (value) {
 		if (!sim || !Number.isFinite(value)) return;
-		RR.Train.setWagons(sim.trains[0], value);
-		RR.UI.setWagons(sim.trains[0].wagons);
+		RR.Sim.setWagons(sim, value);
+		RR.UI.setBuild(sim);
+		RR.UI.updateTelemetry(measuredFps, sim, clock);
+	};
+
+	// slot is a Tech knob index (GAUGE, WHEEL, ENGINE); the build changes at once
+	Main.setKnob = function (slot, value) {
+		if (!sim || !Number.isFinite(value)) return;
+		RR.Sim.setKnob(sim, slot, value);
+		RR.UI.setBuild(sim);
 		RR.UI.updateTelemetry(measuredFps, sim, clock);
 	};
 

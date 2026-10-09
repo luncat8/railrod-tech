@@ -508,6 +508,13 @@ button {
 	backdrop-filter: blur(18px);
 }
 
+.build-group {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 18px;
+}
+
 .telemetry-group {
 	display: flex;
 	align-items: center;
@@ -534,6 +541,11 @@ button {
 	font-weight: 550;
 	font-variant-numeric: tabular-nums;
 	letter-spacing: 0.02em;
+}
+
+.telemetry-item--net strong {
+	color: var(--accent-strong);
+	font-size: 14px;
 }
 
 .telemetry-item strong small {

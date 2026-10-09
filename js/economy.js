@@ -55,6 +55,7 @@
 			idx = i * res + r;
 			add = world.inflow[idx] * dt;
 			if (add <= 0) continue;
+			world.produced[idx] += add;
 			room = world.cap[idx] - world.stock[idx];
 			if (add > room) {
 				world.overflow[idx] += add - room;

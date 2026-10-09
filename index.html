@@ -16,9 +16,9 @@
 				</div>
 				<div class="brand-copy">
 					<strong>RAILROD</strong>
-					<span>RAIL ECONOMY / ENGINE HARNESS</span>
+					<span>RAIL ECONOMY / LOOP TRADE</span>
 				</div>
-				<div class="build-badge"><span></span>PROTOTYPE 0.1.3</div>
+				<div class="build-badge"><span></span>PROTOTYPE 0.1.4</div>
 			</div>
 
 			<div class="runtime-controls">
@@ -54,9 +54,9 @@
 			<div id="node-label" class="node-label" hidden></div>
 			<div class="stage-content">
 				<section class="intro" aria-labelledby="intro-title">
-					<div class="eyebrow"><span class="eyebrow-mark"></span>PHASE 01 <span class="eyebrow-slash">/</span> TRAIN IN MOTION</div>
-					<h1 id="intro-title">Every journey<br>starts <em>with a load.</em></h1>
-					<p class="intro-copy">A seeded ring of fourteen nodes wraps 64 km of track. Sources fill their yards, consumers drain them, and every price follows its stock — hover a node to read the quotes. Click any node and the consist runs there, then shuttles: its trip time is predicted before it leaves, and measured against that plan on arrival.</p>
+					<div class="eyebrow"><span class="eyebrow-mark"></span>PHASE 01 <span class="eyebrow-slash">/</span> ONE-WAY LOOP</div>
+					<h1 id="intro-title">The train never<br>turns <em>back.</em></h1>
+					<p class="intro-copy">A seeded ring of fourteen nodes wraps 64 km of track. The train runs one way round it and stops only where it can trade: unloading into a consumer that needs its cargo, or loading from a source at a margin. Money is not limited, so the number to watch is NET/S — trade profit per second less the build's capex, amortised. Change the gauge, wheel, engine and wagons and watch it move.</p>
 
 					<div class="capabilities" aria-label="Runtime capabilities">
 						<div class="capability">
@@ -71,27 +71,27 @@
 						</div>
 						<div class="capability">
 							<span class="capability-index">03</span>
-							<span class="capability-label">RNG STREAM</span>
-							<strong>SEEDED</strong>
+							<span class="capability-label">BUILD KNOBS</span>
+							<strong>3 <small>+ wagons</small></strong>
 						</div>
 						<div class="capability">
 							<span class="capability-index">04</span>
-							<span class="capability-label">TRACTION</span>
-							<strong>ADHESIVE</strong>
+							<span class="capability-label">MOVEMENT</span>
+							<strong>ONE WAY</strong>
 						</div>
 					</div>
 				</section>
 
 				<aside class="next-step" aria-label="Next milestone">
 					<span class="next-step-label">UP NEXT</span>
-					<strong>Trading and profit</strong>
-					<span class="next-step-meta">MILESTONE 0.1.4 <span>↗</span></span>
+					<strong>Optimum emergence</strong>
+					<span class="next-step-meta">MILESTONE 0.1.5 <span>↗</span></span>
 				</aside>
 			</div>
 		</main>
 
 		<footer class="hud-bottom" aria-label="Simulation telemetry">
-			<div class="telemetry-group">
+			<div class="build-group">
 				<label class="speed-control consist-control" for="wagons-input">
 					<span class="control-label">WAGONS</span>
 					<span class="speed-row">
@@ -99,14 +99,49 @@
 						<output id="wagons-value" for="wagons-input">4</output>
 					</span>
 				</label>
+				<label class="speed-control consist-control" for="gauge-input">
+					<span class="control-label">GAUGE</span>
+					<span class="speed-row">
+						<input id="gauge-input" type="range" min="0" max="1" step="0.01" value="0.5" aria-label="Track gauge">
+						<output id="gauge-value" for="gauge-input">2.30 M</output>
+					</span>
+				</label>
+				<label class="speed-control consist-control" for="wheel-input">
+					<span class="control-label">WHEEL</span>
+					<span class="speed-row">
+						<input id="wheel-input" type="range" min="0" max="1" step="0.01" value="0.5" aria-label="Wheel diameter">
+						<output id="wheel-value" for="wheel-input">1.00 M</output>
+					</span>
+				</label>
+				<label class="speed-control consist-control" for="engine-input">
+					<span class="control-label">ENGINE</span>
+					<span class="speed-row">
+						<input id="engine-input" type="range" min="0" max="1" step="0.01" value="0.5" aria-label="Engine size">
+						<output id="engine-value" for="engine-input">40 T</output>
+					</span>
+				</label>
+			</div>
 
+			<div class="telemetry-group">
+				<div class="telemetry-item telemetry-item--net">
+					<span class="telemetry-label">NET / S</span>
+					<strong><span id="net-value">+0.00</span><small> CR/S</small></strong>
+				</div>
+				<div class="telemetry-item">
+					<span class="telemetry-label">PROFIT / S</span>
+					<strong><span id="profit-value">+0.00</span><small> CR/S</small></strong>
+				</div>
+				<div class="telemetry-item">
+					<span class="telemetry-label">CAPEX / S</span>
+					<strong><span id="capex-value">-0.00</span><small> CR/S</small></strong>
+				</div>
 				<div class="telemetry-item">
 					<span class="telemetry-label">TRAIN SPEED</span>
 					<strong><span id="train-speed-value">0.00</span><small> KM/S</small></strong>
 				</div>
 				<div class="telemetry-item">
-					<span class="telemetry-label">TRIP MEASURED / PLANNED</span>
-					<strong><span id="trip-value">—</span><small> S</small></strong>
+					<span class="telemetry-label">CARGO LOADED</span>
+					<strong><span id="cargo-value">0/4</span></strong>
 				</div>
 
 				<div class="telemetry-item">
@@ -139,6 +174,8 @@
 	<script src="./js/const.js"></script>
 	<script src="./js/world.js"></script>
 	<script src="./js/economy.js"></script>
+	<script src="./js/tech.js"></script>
+	<script src="./js/trade.js"></script>
 	<script src="./js/train.js"></script>
 	<script src="./js/sim.js"></script>
 	<script src="./js/clock.js"></script>

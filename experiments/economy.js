@@ -5,6 +5,8 @@ var Rng = require("../js/rng.js");
 var Const = require("../js/const.js");
 var World = require("../js/world.js");
 var Economy = require("../js/economy.js");
+require("../js/tech.js");
+require("../js/trade.js");
 require("../js/train.js");
 var Sim = require("../js/sim.js");
 
@@ -62,7 +64,7 @@ function testFullYardHoldsFloorPriceAndOverflows() {
 	world.stock[idx] = world.cap[idx];
 	world.overflow[idx] = 0;
 
-	Sim.step(sim, DT);
+	Economy.tick(sim.world, DT);
 
 	assert.strictEqual(world.stock[idx], world.cap[idx], "a full yard stays pinned at capacity");
 	assert(
@@ -98,7 +100,7 @@ function testStarvedConsumerStalls() {
 		if (mask & (1 << r)) world.stock[idx] = 0;
 		before.push(world.stock[idx]);
 	}
-	for (step = 0; step < 600; step += 1) Sim.step(sim, DT);
+	for (step = 0; step < 600; step += 1) Economy.tick(sim.world, DT);
 	for (r = 0; r < res; r += 1) {
 		idx = i * res + r;
 		assert.strictEqual(world.stock[idx], before[r], "starved consumer stock frozen (r" + r + ")");
@@ -109,7 +111,7 @@ function testStarvedConsumerStalls() {
 	world.stock[i * res + masked[0]] = 0.5;
 	world.stock[i * res + masked[1]] = world.cap[i * res + masked[1]];
 	before = [world.stock[i * res + masked[0]], world.stock[i * res + masked[1]]];
-	for (step = 0; step < 600; step += 1) Sim.step(sim, DT);
+	for (step = 0; step < 600; step += 1) Economy.tick(sim.world, DT);
 	assert.strictEqual(world.stock[i * res + masked[0]], before[0], "half-fed consumer stays stalled (scarce input)");
 	assert.strictEqual(world.stock[i * res + masked[1]], before[1], "half-fed consumer stays stalled (fed input frozen too)");
 }
@@ -131,8 +133,8 @@ function testFedConsumerDrainsAtRate() {
 		if (mask & (1 << r)) world.stock[idx] = world.cap[idx];
 	}
 
-	for (step = 0; step < 600; step += 1) Sim.step(sim, DT);
-	t = sim.time;
+	for (step = 0; step < 600; step += 1) Economy.tick(sim.world, DT);
+	t = 600 * DT;
 
 	for (r = 0; r < res; r += 1) {
 		idx = i * res + r;
@@ -170,7 +172,7 @@ function testPriceBoundsAndMonotonicity() {
 	for (s = 0; s < BOUND_SEED_COUNT; s += 1) {
 		sim = Sim.create(BOUND_SEED_BASE + s);
 		world = sim.world;
-		for (step = 0; step < BOUND_STEPS; step += 1) Sim.step(sim, DT);
+		for (step = 0; step < BOUND_STEPS; step += 1) Economy.tick(sim.world, DT);
 		for (i = 0; i < world.nodeCount; i += 1) {
 			for (r = 0; r < res; r += 1) {
 				idx = i * res + r;
@@ -244,8 +246,8 @@ function testStockIsConserved() {
 		sim = Sim.create(SEED + 1000 + s);
 		world = sim.world;
 		initial = Array.from(world.stock);
-		for (step = 0; step < BOUND_STEPS; step += 1) Sim.step(sim, DT);
-		t = sim.time;
+		for (step = 0; step < BOUND_STEPS; step += 1) Economy.tick(sim.world, DT);
+		t = BOUND_STEPS * DT;
 		for (i = 0; i < world.nodeCount; i += 1) {
 			for (r = 0; r < res; r += 1) {
 				idx = i * res + r;

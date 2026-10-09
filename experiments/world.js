@@ -4,8 +4,10 @@ var assert = require("assert");
 var Rng = require("../js/rng.js");
 var Const = require("../js/const.js");
 var World = require("../js/world.js");
-// sim.js calls into economy and train at reset/step, so they load first
+// sim.js calls into economy and train at reset/step, so they load first, in dependency order
 require("../js/economy.js");
+require("../js/tech.js");
+require("../js/trade.js");
 var Train = require("../js/train.js");
 var Sim = require("../js/sim.js");
 var Render = require("../js/render.js");
@@ -104,11 +106,10 @@ function testTrainCrossesSeamWithoutJump() {
 	var i;
 	var d;
 
-	train.to = -1;
-	train.dir = 1;
+	// a free run: no stop ahead, so the track speed is the only cap
 	train.v = 0;
 	for (i = 0; i < steps; i += 1) {
-		Train.advance(train, dt);
+		Train.advance(train, dt, train.build.vTrack, 0);
 		d = (train.x - prev) % Const.RING_KM;
 		if (d < 0) d += Const.RING_KM;
 		assert(train.x >= 0 && train.x < Const.RING_KM, "position stays wrapped");
@@ -146,10 +147,9 @@ function testCameraFollowsAcrossSeam() {
 	var i;
 	var sx;
 
-	train.to = -1;
-	train.dir = 1;
+	train.v = 0;
 	for (i = 0; i < steps; i += 1) {
-		Train.advance(train, Const.DT);
+		Train.advance(train, Const.DT, train.build.vTrack, 0);
 		cameraX = Render.cameraStep(cameraX, train.x, ringKm, follow);
 		sx = Render.screenX(train.x, cameraX, px, width, ringKm);
 		assert(Math.abs(sx - prevSx) < 50, "no screen jump across the seam while the camera follows");

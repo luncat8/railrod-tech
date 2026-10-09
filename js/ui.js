@@ -9,8 +9,13 @@
 	var speedValue = null;
 	var wagonsInput = null;
 	var wagonsValue = null;
+	var knobInputs = null;
+	var knobValues = null;
 	var trainSpeedValue = null;
-	var tripValue = null;
+	var cargoValue = null;
+	var netValue = null;
+	var profitValue = null;
+	var capexValue = null;
 	var pauseButton = null;
 	var pauseIcon = null;
 	var pauseLabel = null;
@@ -25,7 +30,10 @@
 	var displayedSteps = null;
 	var displayedDropped = null;
 	var displayedTrainSpeed = null;
-	var displayedTrip = "";
+	var displayedCargo = "";
+	var displayedNet = "";
+	var displayedProfit = "";
+	var displayedCapex = "";
 
 	var RES_NAMES = ["R1", "R2", "R3"];
 
@@ -75,15 +83,34 @@
 		controller.setWagons(Number(wagonsInput.value));
 	}
 
-	UI.bind = function (main, seed, speed, wagons) {
+	// knob slot is carried by the input element itself, one handler for all three
+	function onKnobInput(event) {
+		controller.setKnob(Number(event.target.dataset.slot), Number(event.target.value));
+	}
+
+	function bindKnob(slot, inputId, valueId) {
+		var input = document.getElementById(inputId);
+
+		input.dataset.slot = String(slot);
+		input.addEventListener("input", onKnobInput);
+		knobInputs[slot] = input;
+		knobValues[slot] = document.getElementById(valueId);
+	}
+
+	UI.bind = function (main, sim, speed) {
 		controller = main;
+		knobInputs = [];
+		knobValues = [];
 		seedInput = document.getElementById("seed-input");
 		speedInput = document.getElementById("speed-input");
 		speedValue = document.getElementById("speed-value");
 		wagonsInput = document.getElementById("wagons-input");
 		wagonsValue = document.getElementById("wagons-value");
 		trainSpeedValue = document.getElementById("train-speed-value");
-		tripValue = document.getElementById("trip-value");
+		cargoValue = document.getElementById("cargo-value");
+		netValue = document.getElementById("net-value");
+		profitValue = document.getElementById("profit-value");
+		capexValue = document.getElementById("capex-value");
 		pauseButton = document.getElementById("pause-button");
 		pauseIcon = document.getElementById("pause-icon");
 		pauseLabel = document.getElementById("pause-label");
@@ -99,12 +126,34 @@
 		speedInput.addEventListener("input", onSpeedInput);
 		wagonsInput.addEventListener("input", onWagonsInput);
 		pauseButton.addEventListener("click", onPauseClick);
+		bindKnob(RR.Tech.GAUGE, "gauge-input", "gauge-value");
+		bindKnob(RR.Tech.WHEEL, "wheel-input", "wheel-value");
+		bindKnob(RR.Tech.ENGINE, "engine-input", "engine-value");
 
-		UI.setSeed(seed);
+		UI.setSeed(sim.seed);
 		UI.setSpeed(speed);
-		UI.setWagons(wagons);
+		UI.setBuild(sim);
 		UI.setPaused(false);
 	};
+
+	// the build controls mirror the sim; called on every build change, never per frame
+	UI.setBuild = function (sim) {
+		var train = sim.trains[0];
+		var build = train.build;
+		var knobs = sim.knobs;
+
+		if (!wagonsInput) return;
+		wagonsInput.value = String(train.wagons);
+		wagonsValue.textContent = String(train.wagons);
+		setKnobReadout(RR.Tech.GAUGE, knobs, RR.Tech.gaugeM(knobs[RR.Tech.GAUGE]).toFixed(2) + " M");
+		setKnobReadout(RR.Tech.WHEEL, knobs, RR.Tech.wheelM(knobs[RR.Tech.WHEEL]).toFixed(2) + " M");
+		setKnobReadout(RR.Tech.ENGINE, knobs, build.mLoco.toFixed(0) + " T");
+	};
+
+	function setKnobReadout(slot, knobs, label) {
+		knobInputs[slot].value = String(knobs[slot]);
+		knobValues[slot].textContent = label;
+	}
 
 	UI.setSeed = function (seed) {
 		if (seedInput) seedInput.value = String(seed >>> 0);
@@ -117,12 +166,6 @@
 		speedValue.textContent = label;
 	};
 
-	UI.setWagons = function (wagons) {
-		if (!wagonsInput) return;
-		wagonsInput.value = String(wagons);
-		wagonsValue.textContent = String(wagons);
-	};
-
 	UI.setPaused = function (paused) {
 		if (!pauseButton) return;
 		pauseButton.setAttribute("aria-pressed", paused ? "true" : "false");
@@ -132,17 +175,24 @@
 		document.getElementById("runtime-status").textContent = paused ? "PAUSED" : "RUNNING";
 	};
 
+	// signed rate, two decimals; "+" only on gains so a zero reads as "0.00"
+	function signedRate(value) {
+		var rounded = Math.round(value * 100) / 100;
+
+		if (rounded > 0) return "+" + rounded.toFixed(2);
+		return rounded.toFixed(2);
+	}
+
 	UI.updateTelemetry = function (fps, sim, clock) {
 		var train = sim.trains[0];
 		var nextFps = fps < 1 ? -1 : Math.round(fps);
 		var nextTime = Math.round(sim.time * 10) / 10;
 		var nextDropped = Math.round(clock.droppedSeconds * 100) / 100;
 		var nextTrainSpeed = Math.round(train.v * 100) / 100;
-		var nextTrip = train.to < 0
-			? "—"
-			: train.lastTripTime > 0
-				? train.lastTripTime.toFixed(2) + "/" + train.lastTripEstimate.toFixed(2)
-				: "—/" + train.tripEstimate.toFixed(2);
+		var nextCargo = String(train.cargoUnits) + "/" + String(train.wagons);
+		var nextNet = signedRate(sim.netRate);
+		var nextProfit = signedRate(sim.profitRate);
+		var nextCapex = signedRate(-sim.capexRate);
 
 		if (nextFps !== displayedFps) {
 			fpsValue.textContent = nextFps < 0 ? "—" : String(nextFps);
@@ -164,9 +214,21 @@
 			trainSpeedValue.textContent = nextTrainSpeed.toFixed(2);
 			displayedTrainSpeed = nextTrainSpeed;
 		}
-		if (nextTrip !== displayedTrip) {
-			tripValue.textContent = nextTrip;
-			displayedTrip = nextTrip;
+		if (nextCargo !== displayedCargo) {
+			cargoValue.textContent = nextCargo;
+			displayedCargo = nextCargo;
+		}
+		if (nextNet !== displayedNet) {
+			netValue.textContent = nextNet;
+			displayedNet = nextNet;
+		}
+		if (nextProfit !== displayedProfit) {
+			profitValue.textContent = nextProfit;
+			displayedProfit = nextProfit;
+		}
+		if (nextCapex !== displayedCapex) {
+			capexValue.textContent = nextCapex;
+			displayedCapex = nextCapex;
 		}
 	};
 
