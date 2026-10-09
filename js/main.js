@@ -24,11 +24,13 @@
 
 		if (lastTimestamp !== null) elapsed = (timestamp - lastTimestamp) / 1000;
 		lastTimestamp = timestamp;
+		if (elapsed < 0) elapsed = 0;
+		if (elapsed > RR.Const.MAX_FRAME_SECONDS) elapsed = RR.Const.MAX_FRAME_SECONDS;
 
 		if (paused) clock.lastSteps = 0;
 		else RR.Clock.advance(clock, elapsed, speed, RR.Sim.step, sim);
 
-		RR.Render.draw(view, sim.time, paused);
+		RR.Render.draw(view, sim, paused, elapsed);
 		framesInWindow += 1;
 
 		if (fpsInterval >= RR.Const.FPS_WINDOW_MS) {
@@ -52,7 +54,7 @@
 		RR.UI.bind(Main, sim.seed, speed);
 		root.addEventListener("resize", onResize);
 		onResize();
-		RR.Render.draw(view, sim.time, paused);
+		RR.Render.draw(view, sim, paused, 0);
 		root.requestAnimationFrame(frame);
 	};
 

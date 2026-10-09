@@ -3,6 +3,7 @@
 var assert = require("assert");
 var Rng = require("../js/rng.js");
 var Const = require("../js/const.js");
+var World = require("../js/world.js");
 var Sim = require("../js/sim.js");
 var Clock = require("../js/clock.js");
 
@@ -52,11 +53,14 @@ function testStepCapAndDroppedTime() {
 
 function testResetReusesAndRestartsTheStream() {
 	var sim = Sim.create(SEED);
+	var stateAfterCreate = sim.rng.state;
+	var xAfterCreate = Array.from(sim.world.x);
 	var first = Rng.nextUint(sim.rng);
 
 	Sim.reset(sim, SEED);
-	assert.strictEqual(sim.rng.state, SEED >>> 0);
-	assert.strictEqual(Rng.nextUint(sim.rng), first);
+	assert.strictEqual(sim.rng.state, stateAfterCreate, "reset restarts the stream at the same post-generation point");
+	assert.strictEqual(Rng.nextUint(sim.rng), first, "post-reset draws match post-create draws");
+	assert.deepStrictEqual(Array.from(sim.world.x), xAfterCreate, "reset regenerates the identical world");
 	assert.strictEqual(sim.steps, 0);
 	assert.strictEqual(sim.time, 0);
 }
