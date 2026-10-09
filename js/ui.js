@@ -7,6 +7,10 @@
 	var seedInput = null;
 	var speedInput = null;
 	var speedValue = null;
+	var wagonsInput = null;
+	var wagonsValue = null;
+	var trainSpeedValue = null;
+	var tripValue = null;
 	var pauseButton = null;
 	var pauseIcon = null;
 	var pauseLabel = null;
@@ -20,6 +24,8 @@
 	var displayedTime = null;
 	var displayedSteps = null;
 	var displayedDropped = null;
+	var displayedTrainSpeed = null;
+	var displayedTrip = "";
 
 	var RES_NAMES = ["R1", "R2", "R3"];
 
@@ -65,11 +71,19 @@
 		controller.togglePause();
 	}
 
-	UI.bind = function (main, seed, speed) {
+	function onWagonsInput() {
+		controller.setWagons(Number(wagonsInput.value));
+	}
+
+	UI.bind = function (main, seed, speed, wagons) {
 		controller = main;
 		seedInput = document.getElementById("seed-input");
 		speedInput = document.getElementById("speed-input");
 		speedValue = document.getElementById("speed-value");
+		wagonsInput = document.getElementById("wagons-input");
+		wagonsValue = document.getElementById("wagons-value");
+		trainSpeedValue = document.getElementById("train-speed-value");
+		tripValue = document.getElementById("trip-value");
 		pauseButton = document.getElementById("pause-button");
 		pauseIcon = document.getElementById("pause-icon");
 		pauseLabel = document.getElementById("pause-label");
@@ -83,10 +97,12 @@
 		seedInput.addEventListener("change", onSeedChange);
 		document.getElementById("new-seed").addEventListener("click", onNewSeed);
 		speedInput.addEventListener("input", onSpeedInput);
+		wagonsInput.addEventListener("input", onWagonsInput);
 		pauseButton.addEventListener("click", onPauseClick);
 
 		UI.setSeed(seed);
 		UI.setSpeed(speed);
+		UI.setWagons(wagons);
 		UI.setPaused(false);
 	};
 
@@ -101,6 +117,12 @@
 		speedValue.textContent = label;
 	};
 
+	UI.setWagons = function (wagons) {
+		if (!wagonsInput) return;
+		wagonsInput.value = String(wagons);
+		wagonsValue.textContent = String(wagons);
+	};
+
 	UI.setPaused = function (paused) {
 		if (!pauseButton) return;
 		pauseButton.setAttribute("aria-pressed", paused ? "true" : "false");
@@ -111,9 +133,16 @@
 	};
 
 	UI.updateTelemetry = function (fps, sim, clock) {
+		var train = sim.trains[0];
 		var nextFps = fps < 1 ? -1 : Math.round(fps);
 		var nextTime = Math.round(sim.time * 10) / 10;
 		var nextDropped = Math.round(clock.droppedSeconds * 100) / 100;
+		var nextTrainSpeed = Math.round(train.v * 100) / 100;
+		var nextTrip = train.to < 0
+			? "—"
+			: train.lastTripTime > 0
+				? train.lastTripTime.toFixed(2) + "/" + train.lastTripEstimate.toFixed(2)
+				: "—/" + train.tripEstimate.toFixed(2);
 
 		if (nextFps !== displayedFps) {
 			fpsValue.textContent = nextFps < 0 ? "—" : String(nextFps);
@@ -130,6 +159,14 @@
 		if (nextDropped !== displayedDropped) {
 			droppedValue.textContent = nextDropped.toFixed(2);
 			displayedDropped = nextDropped;
+		}
+		if (nextTrainSpeed !== displayedTrainSpeed) {
+			trainSpeedValue.textContent = nextTrainSpeed.toFixed(2);
+			displayedTrainSpeed = nextTrainSpeed;
+		}
+		if (nextTrip !== displayedTrip) {
+			tripValue.textContent = nextTrip;
+			displayedTrip = nextTrip;
 		}
 	};
 

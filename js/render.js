@@ -14,6 +14,7 @@
 	var CON_CAP = "#7f9fc4";
 	var TRAIN_BODY = "#a9d68e";
 	var TRAIN_DIM = "rgba(169, 214, 142, 0.35)";
+	var TRAIN_RAIL = "rgba(169, 214, 142, 0.22)";
 	var TICK = "#e8eee6";
 
 	var BAR_W = 4;
@@ -21,6 +22,11 @@
 	var BAR_H = 22;
 	var BAR_BASE = 27;
 	var HIT_HALF = 20;
+	var LOCO_W = 22;
+	var WAGON_W = 12;
+	var WAGON_GAP = 2;
+	var WAGON_PITCH = WAGON_W + WAGON_GAP;
+	var DWELL_H = 3;
 
 	Render.create = function (canvas) {
 		return {
@@ -32,7 +38,7 @@
 			cameraX: 0,
 			pxPerKm: 1,
 			trackY: 0,
-			lastSimTime: null
+			cameraReady: false
 		};
 	};
 
@@ -93,17 +99,16 @@
 	};
 
 	Render.snapCamera = function (view, sim) {
-		view.cameraX = sim.train.x;
-		view.lastSimTime = sim.time;
+		view.cameraX = sim.trains[0].x;
 	};
 
 	function updateCamera(view, sim, frameDt) {
-		if (view.lastSimTime === null) {
+		if (!view.cameraReady) {
+			view.cameraReady = true;
 			Render.snapCamera(view, sim);
 			return;
 		}
-		view.cameraX = Render.cameraStep(view.cameraX, sim.train.x, C.RING_KM, Math.min(1, C.CAMERA_FOLLOW * frameDt));
-		view.lastSimTime = sim.time;
+		view.cameraX = Render.cameraStep(view.cameraX, sim.trains[0].x, C.RING_KM, Math.min(1, C.CAMERA_FOLLOW * frameDt));
 	}
 
 	function drawTies(view) {
@@ -125,8 +130,20 @@
 		context.stroke();
 	}
 
-	function drawNode(view, world, i) {
+	// the two ends of the shuttle line, marked on the ground under the node
+	function drawWaypointMark(view, train, i, sx) {
 		var context = view.context;
+
+		if (i === train.to) context.fillStyle = TRAIN_BODY;
+		else if (i === train.from) context.fillStyle = TRAIN_RAIL;
+		else return;
+
+		context.fillRect(sx - 10, view.trackY + 8, 20, 2);
+	}
+
+	function drawNode(view, sim, i) {
+		var context = view.context;
+		var world = sim.world;
 		var sx = Render.screenX(world.x[i], view.cameraX, view.pxPerKm, view.width, C.RING_KM);
 
 		if (sx < -40 || sx > view.width + 40) return;
@@ -138,6 +155,7 @@
 		context.fillStyle = TIE;
 		context.fillRect(sx - 16, view.trackY - 2, 32, 2);
 		drawYardBars(view, world, i, sx);
+		drawWaypointMark(view, sim.trains[0], i, sx);
 	}
 
 	// three yard bars above the node, one per resource, each with a price tick
@@ -168,14 +186,55 @@
 		}
 	}
 
-	function drawTrain(view, sim, paused) {
-		var context = view.context;
-		var sx = Render.screenX(sim.train.x, view.cameraX, view.pxPerKm, view.width, C.RING_KM);
+	function consistHalf(wagons) {
+		return (LOCO_W + wagons * WAGON_PITCH) * 0.5;
+	}
 
-		context.fillStyle = paused ? TRAIN_DIM : TRAIN_BODY;
-		context.fillRect(sx - 13, view.trackY - 14, 26, 12);
-		context.fillRect(sx - 4, view.trackY - 22, 9, 8);
-		context.fillRect(sx - 15, view.trackY - 4, 30, 3);
+	// loco + W wagon frames, drawn behind the loco along the direction of travel
+	function drawConsist(view, train, sx, color) {
+		var context = view.context;
+		var half = consistHalf(train.wagons);
+		var head = train.dir > 0 ? sx + half - LOCO_W : sx - half;
+		var wx = train.dir > 0 ? head - WAGON_PITCH : head + LOCO_W;
+		var step = train.dir > 0 ? -WAGON_PITCH : WAGON_PITCH;
+		var top = view.trackY - 12;
+		var j;
+
+		context.fillStyle = color;
+		context.fillRect(head, view.trackY - 14, LOCO_W, 12);
+		context.fillRect(train.dir > 0 ? head + LOCO_W - 9 : head, view.trackY - 22, 9, 8);
+		for (j = 0; j < train.wagons; j += 1) {
+			context.fillRect(wx, top, WAGON_W, 10);
+			context.fillStyle = SKY;
+			context.fillRect(wx + 2, top + 2, WAGON_W - 4, 6);
+			context.fillStyle = color;
+			wx += step;
+		}
+		context.fillRect(sx - half - 2, view.trackY - 4, 2 * half + 4, 3);
+	}
+
+	// dwell progress above the consist; 0.1.4 replaces it with transfer counts
+	function drawDwell(view, train, sx) {
+		var context = view.context;
+		var half = consistHalf(train.wagons);
+		var done = 1 - train.dwellLeft / C.DWELL_S;
+		var top = view.trackY - 30;
+
+		if (done < 0) done = 0;
+		else if (done > 1) done = 1;
+
+		context.fillStyle = TRAIN_RAIL;
+		context.fillRect(sx - half, top, 2 * half, DWELL_H);
+		context.fillStyle = TRAIN_BODY;
+		context.fillRect(sx - half, top, 2 * half * done, DWELL_H);
+	}
+
+	function drawTrain(view, sim, paused) {
+		var train = sim.trains[0];
+		var sx = Render.screenX(train.x, view.cameraX, view.pxPerKm, view.width, C.RING_KM);
+
+		drawConsist(view, train, sx, paused ? TRAIN_DIM : TRAIN_BODY);
+		if (train.state === RR.Train.DWELL) drawDwell(view, train, sx);
 	}
 
 	Render.draw = function (view, sim, paused, frameDt) {
@@ -201,7 +260,7 @@
 		context.lineTo(width, view.trackY + 0.5);
 		context.stroke();
 
-		for (i = 0; i < world.nodeCount; i += 1) drawNode(view, world, i);
+		for (i = 0; i < world.nodeCount; i += 1) drawNode(view, sim, i);
 		drawTrain(view, sim, paused);
 	};
 

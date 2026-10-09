@@ -12,7 +12,7 @@
 			steps: 0,
 			time: 0,
 			world: null,
-			train: { x: 0, v: RR.Const.TRAIN_V }
+			trains: null
 		};
 
 		Sim.reset(sim, value);
@@ -28,16 +28,19 @@
 		sim.time = 0;
 		sim.world = RR.World.generate(sim.rng);
 		RR.Economy.refreshPrices(sim.world);
-		sim.train.x = sim.world.x[0];
-		sim.train.v = RR.Const.TRAIN_V;
+		// array shape reserved for the 0.2 competitor trains; one train today
+		if (!sim.trains) sim.trains = [RR.Train.create()];
+		RR.Train.reset(sim.trains[0], sim.world);
 	};
 
 	Sim.step = function (sim, dt) {
+		var trains = sim.trains;
+		var i;
+
 		sim.steps += 1;
 		sim.time = sim.steps * dt;
 		RR.Economy.tick(sim.world, dt);
-		// placeholder kinematics: constant visual speed, wraps at the seam
-		sim.train.x = RR.World.wrap(sim.train.x + sim.train.v * dt);
+		for (i = 0; i < trains.length; i += 1) RR.Train.step(trains[i], sim.world, dt);
 	};
 
 	RR.Sim = Sim;

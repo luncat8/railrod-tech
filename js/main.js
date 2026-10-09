@@ -18,9 +18,18 @@
 		RR.Render.resize(view);
 	}
 
-	function onMouseMove(event) {
+	function onMouseLeave() {
+		RR.UI.hideNodeLabel();
+	}
+
+	function nodeAt(event) {
 		var rect = view.canvas.getBoundingClientRect();
-		var i = RR.Render.hitNode(view, sim, event.clientX - rect.left, event.clientY - rect.top);
+
+		return RR.Render.hitNode(view, sim, event.clientX - rect.left, event.clientY - rect.top);
+	}
+
+	function onMouseMove(event) {
+		var i = nodeAt(event);
 
 		if (i < 0) {
 			RR.UI.hideNodeLabel();
@@ -29,8 +38,12 @@
 		RR.UI.showNodeLabel(sim.world, i, event.clientX, event.clientY);
 	}
 
-	function onMouseLeave() {
-		RR.UI.hideNodeLabel();
+	// one click sends the train to that node; it shuttles with where it came from
+	function onClick(event) {
+		var i = nodeAt(event);
+
+		if (i < 0) return;
+		RR.Train.setDestination(sim.trains[0], sim.world, i);
 	}
 
 	function frame(timestamp) {
@@ -66,10 +79,11 @@
 		sim = RR.Sim.create(RR.Const.DEFAULT_SEED);
 		clock = RR.Clock.create();
 		view = RR.Render.create(document.getElementById("c"));
-		RR.UI.bind(Main, sim.seed, speed);
+		RR.UI.bind(Main, sim.seed, speed, sim.trains[0].wagons);
 		root.addEventListener("resize", onResize);
 		view.canvas.addEventListener("mousemove", onMouseMove);
 		view.canvas.addEventListener("mouseleave", onMouseLeave);
+		view.canvas.addEventListener("click", onClick);
 		onResize();
 		RR.Render.draw(view, sim, paused, 0);
 		root.requestAnimationFrame(frame);
@@ -98,6 +112,13 @@
 
 		if (seed === sim.seed) seed = (seed + 1) >>> 0;
 		Main.setSeed(seed);
+	};
+
+	Main.setWagons = function (value) {
+		if (!sim || !Number.isFinite(value)) return;
+		RR.Train.setWagons(sim.trains[0], value);
+		RR.UI.setWagons(sim.trains[0].wagons);
+		RR.UI.updateTelemetry(measuredFps, sim, clock);
 	};
 
 	Main.setSpeed = function (value) {

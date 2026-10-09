@@ -4,8 +4,9 @@ var assert = require("assert");
 var Rng = require("../js/rng.js");
 var Const = require("../js/const.js");
 var World = require("../js/world.js");
-// sim.js calls into economy at reset/step, so it must be loaded first
+// sim.js calls into economy and train at reset/step, so they load first
 require("../js/economy.js");
+var Train = require("../js/train.js");
 var Sim = require("../js/sim.js");
 var Render = require("../js/render.js");
 
@@ -92,22 +93,30 @@ function testWorldShape() {
 	assert(srcs >= 1 && cons >= 1, "world has both sources and consumers");
 }
 
+// the kinematics step is the only writer of train.x: it must stay wrapped and
+// continuous while the train travels more than a full lap
 function testTrainCrossesSeamWithoutJump() {
 	var sim = Sim.create(31337);
-	var v = Const.TRAIN_V;
+	var train = sim.trains[0];
 	var dt = Const.DT;
-	var steps = Math.ceil(Const.RING_KM / (v * dt)) + 10;
-	var prev = sim.train.x;
+	var steps = Math.ceil(Const.RING_KM / (0.4 * dt)) + 10;
+	var prev = train.x;
 	var i;
 	var d;
 
+	train.to = -1;
+	train.dir = 1;
+	train.v = 0;
 	for (i = 0; i < steps; i += 1) {
-		Sim.step(sim, dt);
-		d = (sim.train.x - prev) % Const.RING_KM;
+		Train.advance(train, dt);
+		d = (train.x - prev) % Const.RING_KM;
 		if (d < 0) d += Const.RING_KM;
-		assert(Math.abs(d - v * dt) < 1e-4, "wrapped step keeps constant speed across the seam");
-		prev = sim.train.x;
+		assert(train.x >= 0 && train.x < Const.RING_KM, "position stays wrapped");
+		assert(d < 0.5, "no jump across the seam");
+		assert(World.distance(train.x, prev) === Math.min(d, Const.RING_KM - d), "ring distance matches the step");
+		prev = train.x;
 	}
+	assert(train.v > 0, "a free-running train keeps accelerating over a lap");
 }
 
 function testEveryPositionHasACameraNearCopy() {
@@ -129,17 +138,20 @@ function testCameraFollowsAcrossSeam() {
 	var px = 50;
 	var width = 1200;
 	var sim = Sim.create(999);
-	var cameraX = sim.train.x;
+	var train = sim.trains[0];
+	var cameraX = train.x;
 	var follow = 0.1;
-	var steps = Math.ceil((Const.RING_KM * 2.5) / (Const.TRAIN_V * Const.DT));
-	var prevSx = Render.screenX(sim.train.x, cameraX, px, width, ringKm);
+	var steps = Math.ceil(Const.RING_KM * 2.5 / (0.4 * Const.DT));
+	var prevSx = Render.screenX(train.x, cameraX, px, width, ringKm);
 	var i;
 	var sx;
 
+	train.to = -1;
+	train.dir = 1;
 	for (i = 0; i < steps; i += 1) {
-		Sim.step(sim, Const.DT);
-		cameraX = Render.cameraStep(cameraX, sim.train.x, ringKm, follow);
-		sx = Render.screenX(sim.train.x, cameraX, px, width, ringKm);
+		Train.advance(train, Const.DT);
+		cameraX = Render.cameraStep(cameraX, train.x, ringKm, follow);
+		sx = Render.screenX(train.x, cameraX, px, width, ringKm);
 		assert(Math.abs(sx - prevSx) < 50, "no screen jump across the seam while the camera follows");
 		assert(Math.abs(sx - width * 0.5) <= width * 0.5 + 60, "train stays on screen");
 		prevSx = sx;

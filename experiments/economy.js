@@ -5,6 +5,7 @@ var Rng = require("../js/rng.js");
 var Const = require("../js/const.js");
 var World = require("../js/world.js");
 var Economy = require("../js/economy.js");
+require("../js/train.js");
 var Sim = require("../js/sim.js");
 
 var DT = Const.DT;
@@ -30,9 +31,6 @@ function findNode(world, kind, maskBits) {
 	}
 	return -1;
 }
-
-// sim.js calls into economy at reset/step, so it must be loaded first
-require("../js/economy.js");
 
 function createSimWithConsumer(maskBits) {
 	var s;

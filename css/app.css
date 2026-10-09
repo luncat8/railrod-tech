@@ -255,6 +255,23 @@ button {
 	width: 174px;
 }
 
+/* wagons rides in the footer beside the telemetry, so it is narrower */
+.consist-control {
+	width: 124px;
+}
+
+.consist-control .speed-row {
+	gap: 8px;
+}
+
+.consist-control .speed-row input[type="range"] {
+	width: 74px;
+}
+
+.consist-control .speed-row output {
+	min-width: 26px;
+}
+
 .speed-row {
 	gap: 11px;
 }
@@ -494,6 +511,7 @@ button {
 .telemetry-group {
 	display: flex;
 	align-items: center;
+	flex-wrap: wrap;
 	gap: clamp(23px, 3.6vw, 57px);
 }
 
@@ -683,6 +701,14 @@ button {
 
 	.speed-control {
 		width: 150px;
+	}
+
+	.consist-control {
+		width: 108px;
+	}
+
+	.consist-control .speed-row input[type="range"] {
+		width: 62px;
 	}
 
 	.speed-row input[type="range"] {

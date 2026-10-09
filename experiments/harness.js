@@ -4,8 +4,9 @@ var assert = require("assert");
 var Rng = require("../js/rng.js");
 var Const = require("../js/const.js");
 var World = require("../js/world.js");
-// sim.js calls into economy at reset/step, so it must be loaded first
+// sim.js calls into economy and train at reset/step, so they load first
 require("../js/economy.js");
+require("../js/train.js");
 var Sim = require("../js/sim.js");
 var Clock = require("../js/clock.js");
 
@@ -32,14 +33,30 @@ function runSchedule(speed) {
 	return sim;
 }
 
+function stockChecksum(world) {
+	var sum = 0;
+	var i;
+
+	for (i = 0; i < world.stock.length; i += 1) sum += world.stock[i];
+	return Math.round(sum * 1000);
+}
+
 function testSpeedIndependentDeterminism() {
 	var normal = runSchedule(1);
 	var fast = runSchedule(8);
+	var a = normal.trains[0];
+	var b = fast.trains[0];
 
 	assert.strictEqual(normal.seed, fast.seed);
 	assert.strictEqual(normal.steps, fast.steps);
 	assert.strictEqual(normal.time, fast.time);
 	assert.strictEqual(normal.rng.state, fast.rng.state);
+	assert.strictEqual(a.x, b.x, "train position matches across speeds");
+	assert.strictEqual(a.v, b.v, "train speed matches across speeds");
+	assert.strictEqual(a.state, b.state, "train state matches across speeds");
+	assert.strictEqual(a.at, b.at, "train waypoint matches across speeds");
+	assert.strictEqual(a.tripTime, b.tripTime, "trip clock matches across speeds");
+	assert.strictEqual(stockChecksum(normal.world), stockChecksum(fast.world), "economy matches across speeds");
 }
 
 function testStepCapAndDroppedTime() {
@@ -70,4 +87,4 @@ function testResetReusesAndRestartsTheStream() {
 testSpeedIndependentDeterminism();
 testStepCapAndDroppedTime();
 testResetReusesAndRestartsTheStream();
-console.log("Harness checks passed: deterministic speed schedules, step cap, dropped-time accounting, and seed reset.");
+console.log("Harness checks passed: deterministic speed schedules, step cap, dropped-time accounting, train state, and seed reset.");
