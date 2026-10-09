@@ -1,0 +1,3 @@
+- For deterministic speed tests, compare snapshots after the same number of fixed simulation steps, not after the same number of rendered frames or wall-clock seconds.
+- `requestAnimationFrame` timestamps are milliseconds; convert to seconds once before applying speed, cap long-frame backlog, and account for discarded simulation time.
+- With inventory-driven prices, quote a one-unit trade over the stock interval it crosses. A midpoint quote makes an immediate buy/sell traverse the same underlying price interval, so spread prevents same-node market-impact arbitrage.
