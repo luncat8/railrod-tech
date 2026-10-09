@@ -29,6 +29,9 @@
 		return {
 			targetKm: C.LINE_LAPS_DEFAULT * C.RING_KM,
 			time: 0,
+			// seconds under way. a line that had to run further to finish clean is slower
+			// in seconds and not in speed, and the pace is the claim about the build
+			move: 0,
 			armed: false,     // the finish is behind the train; the next clean stop ends it
 			cycle0: 0,        // trade cycles closed at the finish crossing, taken there
 			done: false,
@@ -52,6 +55,7 @@
 	// it. That is what makes the total the line's own and not the previous build's.
 	Line.begin = function (meter) {
 		meter.time = 0;
+		meter.move = 0;
 		meter.armed = false;
 		meter.done = false;
 		meter.cut = false;
@@ -62,6 +66,7 @@
 		var complete;
 
 		meter.time += dt;
+		if (train.state !== Train.DWELL) meter.move += dt;
 		if (!meter.armed && train.km >= meter.targetKm) {
 			// the cycle count is taken at the finish, not at the start: a stop the train
 			// left empty before it would end the line with the rest of its cargo aboard
@@ -104,6 +109,17 @@
 		return meter.done ? meter.seconds : meter.time;
 	};
 
+	// km per second under way: the build's own pace, with the stops and the distance the
+	// market made the line run taken back out of it
+	Line.speed = function (meter, train) {
+		return meter.move > 0 ? Line.km(meter, train) / meter.move : 0;
+	};
+
+	// and the seconds it stood at a stop, which is the other half of the line's clock
+	Line.dwell = function (meter) {
+		return meter.time - meter.move;
+	};
+
 	Line.km = function (meter, train) {
 		return meter.done ? meter.km : train.km;
 	};
@@ -122,6 +138,7 @@
 			used: new Uint8Array(C.LINE_SLOT_MAX),
 			queued: new Uint8Array(C.LINE_SLOT_MAX),
 			cut: new Uint8Array(C.LINE_SLOT_MAX),
+			move: new Float64Array(C.LINE_SLOT_MAX),
 			gross: new Float64Array(C.LINE_SLOT_MAX),
 			capex: new Float64Array(C.LINE_SLOT_MAX),
 			net: new Float64Array(C.LINE_SLOT_MAX),
@@ -353,6 +370,7 @@
 		bench.net[slot] = meter.net;
 		bench.seconds[slot] = meter.seconds;
 		bench.km[slot] = meter.km;
+		bench.move[slot] = meter.move;
 		bench.stops[slot] = meter.stops;
 		bench.units[slot] = meter.units;
 		bench.cut[slot] = meter.cut ? 1 : 0;

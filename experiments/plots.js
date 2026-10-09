@@ -99,19 +99,22 @@ function testWagonsPlotIsWeightAndTransferTime() {
 	Sim.setKnob(sim, Tech.GAUGE, Const.KNOB_G);
 }
 
-// gauge: the hold is a staircase of whole units over the wagon count, and the mass
-// it drags along rises with it. the two together are the reason to look twice
-function testGaugePlotIsHoldAgainstMass() {
+// gauge: the hold is a staircase of whole units over the wagon count, the mass it
+// drags along rises with it, and the air it pushes rises faster than both. the three
+// together are the reason to look twice
+function testGaugePlotIsHoldAgainstMassAndAir() {
 	var sim = simAt(SEEDS[0]);
 	var train = sim.trains[0];
 	var plot = plotFor(sim, Plot.GAUGE);
 	var hold = seriesOf(plot, 0, 0);
 	var mass = seriesOf(plot, 0, 1);
+	var air = seriesOf(plot, 0, 2);
 	var i;
 
 	for (i = 1; i < Plot.SAMPLES; i += 1) {
 		assert(hold.values[i] >= hold.values[i - 1], "a wider gauge never holds less");
 		assert(mass.values[i] > mass.values[i - 1], "and always drags more iron");
+		assert(air.values[i] > air.values[i - 1], "and always pushes more air");
 	}
 	assert.strictEqual(hold.values[0], train.wagons * Const.UNIT_T, "the narrowest gauge holds one unit a wagon");
 	assert.strictEqual(hold.values[Plot.SAMPLES - 1], train.wagons * Const.HOLD_MAX * Const.UNIT_T,
@@ -119,6 +122,11 @@ function testGaugePlotIsHoldAgainstMass() {
 	assert.strictEqual(mass.values[Plot.SAMPLES - 1] - mass.values[0],
 		train.wagons * (Tech.mWagonOf(1, Const.KNOB_D) - Tech.mWagonOf(0, Const.KNOB_D)),
 		"the mass curve is the wagon the gauge builds");
+	// the air rises faster than the iron it is drawn over: a wider gauge is not only
+	// heavier, it is heavier in proportion to the speed it is allowed to run at
+	assert(air.values[Plot.SAMPLES - 1] / air.values[0]
+		> mass.values[Plot.SAMPLES - 1] / mass.values[0],
+		"the air grows faster than the mass it is charged against");
 }
 
 // wheel: heavier and longer to stop as it grows, and the acceleration curve over
@@ -269,7 +277,7 @@ function testPlotsFollowTheConsist() {
 
 testCurvesAreFiniteAndBounded();
 testWagonsPlotIsWeightAndTransferTime();
-testGaugePlotIsHoldAgainstMass();
+testGaugePlotIsHoldAgainstMassAndAir();
 testWheelPlotIsFrictionAndMass();
 testEnginePlotIsForceAgainstMass();
 testPlotAgreesWithTheBuild();

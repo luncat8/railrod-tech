@@ -1,9 +1,9 @@
 # Railrod
 
 A small, file-friendly prototype of a dynamic railway economy. The game is being
-built in milestones; the current implementation is **0.1.8 — the fixed-length line
-and the bench**. The next milestone is tuning the hold economy and the world's
-legibility under it.
+built in milestones; the current implementation is **0.1.9 — the air the gauge pays
+for**. The next milestone is tuning the hold economy and the world's legibility
+under it.
 
 ## Run
 
@@ -61,16 +61,27 @@ it re-prices the build from that moment, and the train brakes down if the new
 track speed is lower. Telemetry also shows the render rate, simulated seconds,
 fixed steps, and sim time discarded after a long frame.
 
-**The gauge carries the cargo.** A wagon holds one unit on 0.6 m track and
-`HOLD_MAX` units on 4.0 m, so the consist's hold is `round(wagons · hold(g))`
-units and the dwell is that hold out and in again. The hatch grows with the wagon
-too, so a bigger wagon turns round in less than its size in extra time — dwell
-grows fast with the wagon *count* and slowly with the wagon *size*. Cargo loaded
-under a wide gauge stays aboard if the gauge is then narrowed, and simply counts
-against the hold while it does.
+**The gauge carries the cargo, and it pays for it in air.** A wagon holds one unit
+on 0.6 m track and `HOLD_MAX` units on 4.0 m, so the consist's hold is
+`round(wagons · hold(g))` units and the dwell is that hold out and in again. The
+hatch grows with the wagon too, so a bigger wagon turns round in less than its size
+in extra time — dwell grows fast with the wagon *count* and slowly with the wagon
+*size*. Cargo loaded under a wide gauge stays aboard if the gauge is then narrowed,
+and simply counts against the hold while it does.
+
+The loading gauge is also the vehicle's cross-section, and air is paid for in
+cross-section: a train on 4.0 m track pushes 6.7× the frontal area of one on 0.6 m,
+so `F = c_rr·M·G + c_drag·area(g)·v³`. The track limit is nearly flat across the
+slider by comparison — the safe speed on a curve is the gauge against the height it
+carries, and a narrow train is narrow and low together. The two cross in the middle:
+below it a train reaches the speed it is allowed and is held down by its track, above
+it a train cannot reach the speed it is allowed and is held down by its own bulk.
+Both ends of the slider are therefore slower than the middle — a loaded 4-wagon lap
+takes 49.9 s on the narrowest gauge, 43.1 s at 2.30 m, and 49.4 s at 4.0 m — which
+is what makes the gauge a trade-off and not a ramp.
 
 Touch any build control and its **curve** opens above it: wagons against weight
-and load time, gauge against hold and mass, wheel against friction (acceleration
+and load time, gauge against hold, mass and air, wheel against friction (acceleration
 and braking distance) and mass — with a second chart of acceleration against
 speed at your wheel and at both extremes — and engine against force and mass,
 where the power line `P / V` crosses the adhesion line at the point past which a
@@ -108,7 +119,14 @@ measured headlessly, so its total appears within a frame of the slider moving; t
 line you watch run is the same computation, and the two are asserted equal to the
 bit. `+ ROW` puts the build you are running on the bench, where it survives the next
 slider move — that is the comparison with the settings you had. Click a row to run
-it: the train takes the whole build, wagon count included. A train that cannot run
+it: the train takes the whole build, wagon count included. Each row carries its
+rate beside its total — `CR/S`, the line's net over its own seconds, which is the
+unit a swept dot is measured in, so a row and a dot for the same build can be read
+against each other. Hover a row for what the total is made of: the distance it ran,
+the stops and units, its pace in km per second under way, and its seconds at a stop.
+The pace and the clock are not the same claim — a line that had to run further to
+finish clean is slower in seconds and not in speed — so `LINE TIME` in the footer
+carries both: `146.3 S · 1.19 KM/S`. A train that cannot run
 the line — the heaviest consist on the smallest engine stalls once loaded — is cut at
 a cutoff and priced as the dead weight it is, in red, and the footer's bars are
 scaled on the rows that finished clean so it cannot flatten them.
@@ -132,6 +150,7 @@ node experiments/plots.js
 node experiments/line.js
 node experiments/boot.js
 node experiments/surface.js
+node experiments/gauge.js
 ```
 
 `harness.js` compares identical seeded state after 30,000 fixed steps at 1× and
@@ -192,6 +211,7 @@ pass leaves the sim alone, and that a knob change re-prices capital but never th
 market. `--map --seed=n` prints the surface for a human, `--window=s` and
 `--seeds=n` shrink a run while tuning.
 
-See `0.1.8-plan.md` for this milestone's design, `archive/0.1.7-plan.md` for the
-run modes and build curves, `0.1.0-plan.md` for the stage design, and
-`deferred-plan.md` for the parked trading and auto-trader work.
+See `0.1.9-plan.md` for this milestone's design, `0.1.8-plan.md` for the line and
+the bench it rides on, `archive/0.1.7-plan.md` for the run modes and build curves,
+`0.1.0-plan.md` for the stage design, and `deferred-plan.md` for the parked trading
+and auto-trader work.

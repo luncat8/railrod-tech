@@ -350,7 +350,8 @@ assert.strictEqual(inspect().sim.line.done, true, "the live line finishes inside
 row = rowsBox.children[0];
 assert.strictEqual(row.children[0].textContent, "LIVE", "the first row is the build being run");
 assert(/^[+-]?\d+\.\d\d$/.test(row.children[2].textContent), "a row reads its total");
-assert(/^\d+\.\d$/.test(row.children[3].textContent), "and the seconds the line took");
+assert(/^[+-]?\d+\.\d\d$/.test(row.children[3].textContent), "and its rate over its own seconds");
+assert(/^\d+\.\d$/.test(row.children[4].textContent), "and the seconds the line took");
 assert.strictEqual(elements["net-value"].textContent, row.children[2].textContent,
 	"the headline is the live row: one line, measured twice, read the same");
 assert.strictEqual(elements["avg-value"].textContent, inspect().sim.line.seconds.toFixed(1),

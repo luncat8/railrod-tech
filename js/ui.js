@@ -31,6 +31,7 @@
 	var capexUnit = null;
 	var avgLabel = null;
 	var avgUnit = null;
+	var displayedAvgUnit = "";
 	var optimumLabel = null;
 	var optimumUnit = null;
 	var optimumBuildLabel = null;
@@ -370,6 +371,7 @@
 		setReadout(optimumLabel, optimumUnit, on ? "BENCH BEST" : "OPTIMUM / S", on ? " CR" : " CR/S");
 		optimumBuildLabel.textContent = on ? "BEST LINE W·G·D·E" : "OPTIMUM BUILD G·D·E";
 		displayedNetUnit = "";
+		displayedAvgUnit = "";
 		UI.hidePlot();
 		UI.setBench(sim, bench);
 	};
@@ -424,12 +426,14 @@
 				mark: cell(el, "bench-mark"),
 				build: cell(el, "bench-build"),
 				net: cell(el, "bench-net"),
+				rate: cell(el, "bench-rate"),
 				time: cell(el, "bench-time"),
 				state: "",
 				titleShown: "",
 				markShown: "",
 				buildShown: "",
 				netShown: "",
+				rateShown: "",
 				timeShown: ""
 			});
 			benchRows.appendChild(el);
@@ -445,6 +449,12 @@
 			+ " " + RR.Tech.mLocoOf(knobs[RR.Tech.ENGINE]).toFixed(0);
 	}
 
+	// the row's own rate: its total over its own seconds, which is the unit the swept grid
+	// measures a dot in, so a bench row and a dot for the same build can be read together
+	function rateOf(bench, slot) {
+		return bench.seconds[slot] > 0 ? (bench.net[slot] / bench.seconds[slot]).toFixed(2) : "—";
+	}
+
 	// pending rows show no number: the one they hold was measured on the build before the
 	// slider moved, and a stale total next to a new build is a lie
 	function rowState(bench, slot) {
@@ -456,10 +466,15 @@
 	}
 
 	// what the row ran, behind it: a line is the fixed length plus whatever it took to
-	// finish clean, and that distance is the part of the total worth checking
+	// finish clean, and that distance is the part of the total worth checking. the pace
+	// is there for the same reason — a line that ran further is slower in seconds and
+	// not in speed, and a build is only called slow by one of those two
 	function rowTitle(bench, slot) {
+		var move = bench.move[slot];
 		var run = bench.km[slot].toFixed(1) + " KM RUN · " + bench.stops[slot] + " STOPS · "
-			+ bench.units[slot] + " UNITS";
+			+ bench.units[slot] + " UNITS · "
+			+ (move > 0 ? (bench.km[slot] / move).toFixed(2) + " KM/S UNDER WAY · " : "")
+			+ (bench.seconds[slot] - move).toFixed(1) + " S AT STOPS";
 
 		if (!bench.used[slot]) return "AN EMPTY ROW: + ROW PUTS THE LIVE BUILD HERE";
 		if (bench.queued[slot]) return slot === 0 ? "MEASURING THE BUILD YOU ARE RUNNING" : "MEASURING";
@@ -475,6 +490,7 @@
 		var mark = bench.used[slot] ? (slot === 0 ? "LIVE" : "#" + (slot + 1)) : "—";
 		var build = bench.used[slot] ? buildText(bench, slot) : "EMPTY";
 		var net = pending ? (bench.used[slot] ? "…" : "—") : signed(bench.net[slot]);
+		var rate = pending ? (bench.used[slot] ? "…" : "—") : rateOf(bench, slot);
 		var time = pending ? (bench.used[slot] ? "…" : "—") : bench.seconds[slot].toFixed(1);
 
 		if (state !== row.state) {
@@ -496,6 +512,10 @@
 		if (net !== row.netShown) {
 			row.net.textContent = net;
 			row.netShown = net;
+		}
+		if (rate !== row.rateShown) {
+			row.rate.textContent = rate;
+			row.rateShown = rate;
 		}
 		if (time !== row.timeShown) {
 			row.time.textContent = time;
@@ -668,6 +688,9 @@
 		var nextProfit = onLine ? signed(RR.Line.gross(line, train)) : signed(sim.profitRate);
 		var nextCapex = onLine ? signed(-RR.Line.capex(line, train)) : signed(-sim.capexRate);
 		var nextAvg = onLine ? RR.Line.seconds(line).toFixed(1) : signed(sim.netMean);
+		// the line's pace beside its clock: a line that ran further to finish clean is
+		// slower in seconds and not in speed, and only the pace says which it was
+		var nextAvgUnit = onLine ? " S · " + RR.Line.speed(line, train).toFixed(2) + " KM/S" : " CR/S";
 		var nextRate = rate >= 100 ? String(Math.round(rate / 10) * 10) : String(Math.round(rate));
 		var measured = !!sweep && sweep.best >= 0;
 		var nextOptimum = "—";
@@ -731,6 +754,10 @@
 		if (nextAvg !== displayedAvg) {
 			avgValue.textContent = nextAvg;
 			displayedAvg = nextAvg;
+		}
+		if (nextAvgUnit !== displayedAvgUnit) {
+			avgUnit.textContent = nextAvgUnit;
+			displayedAvgUnit = nextAvgUnit;
 		}
 		if (nextRate !== displayedRate) {
 			rateValue.textContent = nextRate;

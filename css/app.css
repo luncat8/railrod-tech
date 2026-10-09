@@ -728,7 +728,7 @@ button {
 	z-index: 2;
 	display: flex;
 	overflow: hidden;
-	width: 264px;
+	width: 288px;
 	max-height: calc(100% - 28px);
 	flex-direction: column;
 	gap: 7px;
@@ -806,8 +806,8 @@ button {
 .bench-row {
 	display: grid;
 	align-items: baseline;
-	grid-template-columns: 32px 1fr 58px 42px;
-	gap: 5px;
+	grid-template-columns: 28px 1fr 52px 40px 38px;
+	gap: 4px;
 }
 
 .bench-cols {
@@ -818,6 +818,7 @@ button {
 
 .bench-cols .bench-num,
 .bench-net,
+.bench-rate,
 .bench-time {
 	text-align: right;
 }
@@ -865,12 +866,17 @@ button.bench-row:focus-visible {
 }
 
 .bench-net,
+.bench-rate,
 .bench-time {
 	font-variant-numeric: tabular-nums;
 }
 
 .bench-net {
 	color: #dce4db;
+}
+
+.bench-rate {
+	color: #b6c2b5;
 }
 
 .bench-time {
@@ -898,6 +904,7 @@ button.bench-row:focus-visible {
 
 /* a row that ran to the cutoff never finished the line clean: it reads as a loss */
 .bench-row.is-cut .bench-net,
+.bench-row.is-cut .bench-rate,
 .bench-row.is-cut .bench-time,
 .bench-row.is-cut .bench-mark {
 	color: #d98a78;
@@ -1123,15 +1130,15 @@ button.bench-row:focus-visible {
 	.bench-panel {
 		top: 10px;
 		right: 10px;
-		width: 214px;
+		width: 238px;
 		gap: 5px;
 		padding: 8px 9px 7px;
 	}
 
 	.bench-cols,
 	.bench-row {
-		grid-template-columns: 26px 1fr 48px 34px;
-		gap: 4px;
+		grid-template-columns: 24px 1fr 46px 34px 32px;
+		gap: 3px;
 	}
 
 	.bench-build {

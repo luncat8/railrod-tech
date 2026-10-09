@@ -170,19 +170,29 @@
 		var chart = plot.charts[0];
 		var hold = chart.series[0];
 		var mass = chart.series[1];
+		var air = chart.series[2];
 		var i;
+		var v;
+		var m;
 
-		plot.title = "GAUGE · CARGO HOLD AND MASS";
-		plot.note = train.wagons + " WAGONS · THE HOLD IS WHAT THE GAUGE LETS THEM CARRY";
-		setChart(chart, "GAUGE M", 2, C.GAUGE_MIN_M, C.GAUGE_MAX_M, true, 2);
+		plot.title = "GAUGE · CARGO HOLD, MASS AND AIR";
+		plot.note = train.wagons + " WAGONS · THE WIDE END PAYS FOR ITS HOLD IN AIR";
+		setChart(chart, "GAUGE M", 2, C.GAUGE_MIN_M, C.GAUGE_MAX_M, true, 3);
 		setSeries(hold, "HOLD", "T", 0);
 		setSeries(mass, "MASS", "T", 0);
+		setSeries(air, "AIR", "KM/S²", 2);
 
 		for (i = 0; i <= SAMPLES; i += 1) {
 			buildAt(plot, Tech.GAUGE, gaugeOf(xAt(plot, i, C.GAUGE_MIN_M, C.GAUGE_MAX_M, Tech.gaugeM)));
 			plot.train.wagons = train.wagons;
 			put(hold, Train.capacity(plot.train) * C.UNIT_T, i);
-			put(mass, plot.build.mLoco + train.wagons * plot.build.mWagon, i);
+			m = plot.build.mLoco + train.wagons * plot.build.mWagon;
+			v = plot.build.vTrack;
+			put(mass, m, i);
+			// the deceleration the air costs at the build's own line speed: what the
+			// gauge buys in hold it pays for here, and past the middle of the slider
+			// that is what stops the train reaching the speed it is allowed
+			put(air, C.C_DRAG * plot.build.dragArea * v * v * v / m, i);
 		}
 		buildAt(plot, Tech.GAUGE, plot.knobs[Tech.GAUGE]);
 	}

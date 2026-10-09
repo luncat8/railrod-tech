@@ -144,3 +144,32 @@ bot tactics, and heightmap. Trade-related additions that were parked here:
 - fractional wagon fill instead of one whole unit per wagon (open question 3 in
   `0.1.0-plan.md`);
 - payback as a soft win line (open question 2 in `0.1.0-plan.md`).
+
+## 5. Parked from `e8c73a0c`: more than one train on the ring
+
+`e8c73a0c` was a partial multi-line implementation — N lines in `sim.lines`, each
+with its own train, its own knob array and its own copy of the world, all stepped
+live in one frame and drawn in five colours, with the camera, the telemetry and the
+sliders bound to `sim.activeLine`. 0.1.8 replaced it with the headless bench, which
+is the better instrument: it ends a line on a clean trade cycle instead of on a raw
+distance, charges capex against the line's own seconds, runs on the sweep's frame
+budget instead of multiplying the live sim by N, and cuts a consist that cannot
+move instead of letting it run forever. Nothing of it was ported.
+
+Two shapes in it belong to the competitor-trains milestone and are kept here so
+they are not reinvented:
+
+- **The render side of several trains.** `LINE_COLORS` / `LINE_COLORS_DIM`, a
+  `drawTrains` that walks `sim.trains` and draws the active one last so it sits on
+  top, and the camera following `sim.trains[sim.activeLine]` rather than index 0.
+  With one train it is dead code, which is why it is here and not in `render.js`.
+- **Per-line knob arrays with the sliders aliasing the active line.**
+  `sim.trainKnobs[i]` / `sim.trainWagons[i]`, and `sim.knobs = sim.trainKnobs[active]`
+  after a switch, so the footer edits whichever line is selected. The bench already
+  holds the same thing as `bench.knobs[slot]`, so this is only needed once the
+  second train is live rather than headless.
+
+Independence, for reference: both designs give every line the same market and no
+cross-talk. `e8c73a0c` does it with a world copy per line; the bench does it by
+restoring one fixture per row. Copy per line is the right shape once the lines run
+at the same time and can touch the same yards.
