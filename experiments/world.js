@@ -9,6 +9,7 @@ require("../js/economy.js");
 require("../js/tech.js");
 require("../js/trade.js");
 var Train = require("../js/train.js");
+require("../js/line.js");
 var Sim = require("../js/sim.js");
 var Render = require("../js/render.js");
 

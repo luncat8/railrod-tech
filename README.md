@@ -1,8 +1,8 @@
 # Railrod
 
 A small, file-friendly prototype of a dynamic railway economy. The game is being
-built in milestones; the current implementation is **0.1.7 — speed, curves and a
-bigger wagon**. The next milestone is tuning the hold economy and the world's
+built in milestones; the current implementation is **0.1.8 — the fixed-length line
+and the bench**. The next milestone is tuning the hold economy and the world's
 legibility under it.
 
 ## Run
@@ -25,6 +25,9 @@ The page runs one of two ways, chosen by the **ANIMATE** checkbox in the top str
   slider's 2×–30×, defaulting to 8×, and the world is drawn every frame. The step
   cap still stops a lagging frame from building a backlog, and `DROPPED SIM TIME`
   says how much sim time that cap threw away.
+
+**LINE** is the third instrument, and the testing one: a fixed length of track
+totalled end to end instead of a rate averaged over a window. See below.
 
 **SMOOTHING** sets the window, 5–600 s, that `PROFIT / S` and `NET / S` average
 over. `NET / S` also carries a trend: the fast window against a window four times
@@ -75,6 +78,44 @@ bigger engine buys nothing. Every curve is the model the sim runs, sampled from
 `Tech` and `Train.accel` against the knob's whole range, with the marker on your
 build and its value in the legend.
 
+## The line and the bench
+
+**LINE** turns the world into a test track. A line is a fixed length — `LENGTH`,
+1–4 laps of the 64 km ring — run from a standing start at node 0 on a snapshot of
+the market, and it ends at the first moment past the finish where the train leaves a
+stop with nothing aboard, so no cargo in transit is ever priced as profit or as a
+loss. The length is therefore a floor: a 128 km line ends at 174 km on the default
+build, because that is where its next clean stop is, and the distance it ran is
+reported beside the total.
+
+What the mode shows is a **sum over the whole line**, in the footer rows that
+already exist — they keep their places and change their meaning: `LINE NET` (credits
+totalled, with the distance run beside it), `LINE TRADE` (the gross), `LINE CAPEX`
+(the line's own seconds charged at the build's amortised rate, so a faster line pays
+less for the same track), `LINE TIME`, and `BENCH BEST` with its build. The trend
+arrow becomes `VS BENCH`: the live line against the best build you put beside it,
+and the colour is that verdict. `SMOOTHING` is disabled, because a total has no
+window to choose — two runs of one line at a 5 s window and a 600 s window total the
+same to the bit.
+
+Move a knob and the line starts over: the number on screen is the new build's within
+one measurement, not a blend of the build before and after for as long as a window.
+A latched line stays latched while the train runs on past the finish.
+
+The panel in the corner is the **bench**: N lines, 2–8, on one world — same seed,
+same stations, same yards at the start, one train each. Row 0 is your build,
+measured headlessly, so its total appears within a frame of the slider moving; the
+line you watch run is the same computation, and the two are asserted equal to the
+bit. `+ ROW` puts the build you are running on the bench, where it survives the next
+slider move — that is the comparison with the settings you had. Click a row to run
+it: the train takes the whole build, wagon count included. A train that cannot run
+the line — the heaviest consist on the smallest engine stalls once loaded — is cut at
+a cutoff and priced as the dead weight it is, in red, and the footer's bars are
+scaled on the rows that finished clean so it cannot flatten them.
+
+The bench and the swept grid never run in the same frame: LINE mode hands the
+headless budget from one to the other, and the corner with it.
+
 ## Check
 
 With Node.js installed, run:
@@ -88,6 +129,7 @@ node experiments/trade.js
 node experiments/mass-balance.js
 node experiments/tech.js
 node experiments/plots.js
+node experiments/line.js
 node experiments/boot.js
 node experiments/surface.js
 ```
@@ -107,7 +149,9 @@ service rate, a consumer placed inside the braking distance is still reached,
 dwell is the hold out and in at the build's transfer rate, a loaded wagon cannot
 be dropped,
 a knob change never moves the train in a step and never leaves it above the new
-track speed, and the run is deterministic.
+track speed, the trip ledger counts forward only and a stop that moves nothing
+counts as nothing, a reset takes the build and the wagon count it is given, and the
+run is deterministic.
 `trade.js` checks the trade rules: the margin decides loading, only consumers
 that need a resource price it, unloading needs the recipe and room, cash is the
 sum of sequential quotes, a same-node round trip loses the spread, a source never
@@ -121,6 +165,15 @@ moves the build in its stated direction, knobs are clamped, capex is the
 amortised build value, the slider readouts are in metres and tonnes, the gauge
 sets the wagon's hold, the hatch grows with it, and dwell follows the count
 before the size.
+`line.js` is the 0.1.8 instrument: a line covers the length it was asked for and
+totals rather than averages it, it ends clean and repeats, it ignores the smoothing
+window while the rolling rate does not, a longer line runs longer; the bench holds
+one world behind every row, a headless row is an exact replay of the live line field
+for field, three trains are three totals and three times, dead weight is priced, a
+whole bench leaves the sim bit-identical and spends only its budget, capture fills
+and deduplicates and wraps, a clicked row is taken whole, and the mode is a toggle
+the seed and the market survive. `--report` prints a bench for a human, `--laps=n`
+and `--seeds=n` shrink a run while tuning the cutoffs.
 `plots.js` checks the four build curves: they are finite and bounded, they move
 in the directions the knob contract states, the engine's power line crosses its
 adhesion line on every seed, the marker's value is the one `Tech` and `Train`
@@ -128,8 +181,9 @@ give for that build, and a plot is filled rather than rebuilt.
 `boot.js` boots the page against a stub DOM, loading the scripts in the order
 `index.html` lists them, and drives both run modes — MAX's flat step budget with
 no draws against the animated clock's speed range — the smoothing slider, the
-trend, a plot for every build control, hover, the wagons and build sliders, the
-capex, cargo, rate and sweep telemetry, and checks that the loop trades.
+trend, LINE mode with its relabelled footer, its bench rows and their controls, a
+plot for every build control, hover, the wagons and build sliders, the capex, cargo,
+rate and sweep telemetry, and checks that the loop trades.
 `surface.js` is the 0.1.5 instrument: it sweeps the grid per seed through
 `js/sweep.js` and checks that the measured surface has one interior maximum, that
 the largest engine on 4 m gauge loses on every seed, that the loop is still
@@ -138,5 +192,6 @@ pass leaves the sim alone, and that a knob change re-prices capital but never th
 market. `--map --seed=n` prints the surface for a human, `--window=s` and
 `--seeds=n` shrink a run while tuning.
 
-See `0.1.7-plan.md` for this milestone's design, `0.1.0-plan.md` for the stage
-design, and `deferred-plan.md` for the parked trading and auto-trader work.
+See `0.1.8-plan.md` for this milestone's design, `archive/0.1.7-plan.md` for the
+run modes and build curves, `0.1.0-plan.md` for the stage design, and
+`deferred-plan.md` for the parked trading and auto-trader work.

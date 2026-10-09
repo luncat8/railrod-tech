@@ -4,11 +4,12 @@ var assert = require("assert");
 var Rng = require("../js/rng.js");
 var Const = require("../js/const.js");
 var World = require("../js/world.js");
-// sim.js calls into economy and train at reset/step, so they load first, in dependency order
+// sim.js calls into economy, train and line at reset/step, so they load first, in order
 require("../js/economy.js");
 require("../js/tech.js");
 require("../js/trade.js");
 require("../js/train.js");
+require("../js/line.js");
 var Sim = require("../js/sim.js");
 var Clock = require("../js/clock.js");
 
@@ -59,6 +60,8 @@ function testSpeedIndependentDeterminism() {
 	assert.strictEqual(a.at, b.at, "train stop matches across speeds");
 	assert.strictEqual(a.cash, b.cash, "train cash matches across speeds");
 	assert.strictEqual(a.cargoUnits, b.cargoUnits, "train cargo matches across speeds");
+	assert.strictEqual(a.km, b.km, "train odometer matches across speeds");
+	assert.strictEqual(a.cycle, b.cycle, "trade cycles closed match across speeds");
 	assert.strictEqual(normal.netRate, fast.netRate, "net rate matches across speeds");
 	assert.strictEqual(stockChecksum(normal.world), stockChecksum(fast.world), "economy matches across speeds");
 }

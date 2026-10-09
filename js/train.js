@@ -17,7 +17,9 @@
 	// market actually wants
 	Train.SLOT_MAX = C.WAGON_MAX * C.HOLD_MAX;
 
-	// the train runs +x around the loop; it only ever stops where a stop pays
+	// the train runs +x around the loop; it only ever stops where a stop pays. km, stops,
+	// units and cycle are its trip ledger: what a fixed-length line is measured against,
+	// carried by the train so the live line and a headless one read the same counters
 	Train.create = function (build, wagons) {
 		return {
 			x: 0,
@@ -29,6 +31,10 @@
 			stopKm: 0,
 			dwellLeft: 0,
 			dwellTotal: 0,
+			km: 0,
+			stops: 0,
+			units: 0,
+			cycle: 0,
 			wagons: wagons,
 			cargo: new Int8Array(Train.SLOT_MAX).fill(-1), // slot → resource; -1 = empty, 0 is R1
 			cargoUnits: 0,
@@ -119,7 +125,7 @@
 	}
 
 	// one kinematics step under a speed cap and a stop distance (0 = no stop ahead);
-	// returns km covered, x stays wrapped
+	// returns km covered, x stays wrapped and the odometer does not
 	Train.advance = function (train, dt, vCap, stopKm) {
 		var v0 = train.v;
 		var v1 = nextSpeed(train, dt, vCap, stopKm);
@@ -127,6 +133,7 @@
 
 		train.v = v1;
 		train.x = World.wrap(train.x + ds);
+		train.km += ds;
 		return ds;
 	};
 
@@ -175,6 +182,8 @@
 			depart(train);
 			return;
 		}
+		train.stops += 1;
+		train.units += moved;
 		train.state = Train.DWELL;
 		train.dwellTotal = moved / train.build.transferRate;
 		train.dwellLeft = train.dwellTotal;
@@ -193,9 +202,13 @@
 		if (train.stopNode >= 0 && ds >= train.stopKm) arrive(train, world, train.stopNode);
 	}
 
+	// leaving a stop with nothing aboard closes a trade cycle: every unit bought has been
+	// sold, so money counted between two of these is not carrying cargo in transit. the
+	// count is what a line and a swept dot both end on
 	function dwell(train, dt) {
 		train.dwellLeft -= dt;
 		if (train.dwellLeft > 0) return;
+		if (train.cargoUnits === 0) train.cycle += 1;
 		depart(train);
 	}
 
@@ -204,16 +217,24 @@
 		else cruise(train, world, dt);
 	};
 
-	// new world: the train parks at node 0 and trades there like at any stop
-	Train.reset = function (train, world) {
+	// new world: the train parks at node 0 and trades there like at any stop. a build given
+	// here is taken while the consist is still empty, so its wagon count is the one asked
+	// for and not one clamped by the cargo a previous build left aboard
+	Train.reset = function (train, world, build, wagons) {
+		train.cash = 0;
+		train.cargoUnits = 0;
+		train.cargo.fill(-1);
+		train.km = 0;
+		train.stops = 0;
+		train.units = 0;
+		train.cycle = 0;
+		if (build) Train.setBuild(train, build);
+		if (wagons) Train.setWagons(train, wagons);
 		train.x = world.x[0];
 		train.v = 0;
 		train.stopNode = -1;
 		train.stopKm = 0;
 		train.last = -1;
-		train.cash = 0;
-		train.cargoUnits = 0;
-		train.cargo.fill(-1);
 		depart(train);
 		arrive(train, world, 0);
 	};

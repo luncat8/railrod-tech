@@ -87,6 +87,21 @@
 		HISTORY_DIV: 8,     // one sample per smooth / this; the window is HISTORY_N times that
 		HISTORY_PER_FRAME: 4, // and never more than this many per frame, however big the frame is
 		NET_MEAN_S: 600,   // the rate window a swept dot is worth comparing against
+
+		// fixed-length line: the test-track mode. a line is a whole distance run from a
+		// standing start and totalled, not averaged, so two builds read as two totals of
+		// the same kind. the bench runs N of them on one world, one train each
+		LINE_LAPS_MIN: 1,
+		LINE_LAPS_MAX: 4,
+		LINE_LAPS_DEFAULT: 2,
+		LINE_SLOT_MIN: 2,
+		LINE_SLOT_MAX: 8,
+		LINE_SLOT_DEFAULT: 4,
+		LINE_CUTOFF_KM: 384,   // a line that never ends empty is dead weight by here
+		LINE_CUTOFF_S: 1800,   // and a consist that cannot move is dead weight by here
+		LINE_BUDGET_ANIM: 2000, // bench steps a frame while the world is animated
+		LINE_BUDGET_MAX: 6000,  // and a frame in MAX, where no frame is drawn at all
+
 		AMORT_S: 1200,     // horizon over which the build's value is recovered, s
 		K_TRACK: 10,       // track cr/km scale
 		TRACK_BASE: 0.4,   // track cr/km = K_TRACK · (base + gain · g²): the roadbed

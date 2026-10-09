@@ -8,6 +8,7 @@ require("../js/economy.js");
 var Tech = require("../js/tech.js");
 require("../js/trade.js");
 require("../js/train.js");
+require("../js/line.js");
 var Sim = require("../js/sim.js");
 
 var STEPS = 10;

@@ -35,7 +35,7 @@
 			left: 0,
 			since: 0,
 			settling: false,
-			wasDwell: false,
+			cycle0: 0,
 			cash0: 0,
 			done: 0,
 			armedAt: -1,
@@ -121,16 +121,17 @@
 	function begin(sweep, settling) {
 		sweep.settling = settling;
 		sweep.cash0 = sweep.train.cash;
+		sweep.cycle0 = sweep.train.cycle;
 		sweep.left = sweep.cutoff;
 		sweep.since = 0;
 	}
 
-	// true in the step the train leaves a stop with nothing aboard
+	// true in the step the train leaves a stop with nothing aboard: the train keeps that
+	// count itself, so a swept dot and a fixed-length line end on the very same event
 	function cycleEnd(sweep) {
-		var dwelling = sweep.train.state === RR.Train.DWELL;
-		var ended = sweep.wasDwell && !dwelling && sweep.train.cargoUnits === 0;
+		var ended = sweep.train.cycle !== sweep.cycle0;
 
-		sweep.wasDwell = dwelling;
+		sweep.cycle0 = sweep.train.cycle;
 		return ended;
 	}
 

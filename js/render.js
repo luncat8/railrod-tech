@@ -547,6 +547,7 @@
 	var GRAPH_UP = "#a9d68e";
 	var GRAPH_DOWN = "#d98a78";
 	var GRAPH_FLAT = "#89958a";
+	var GRAPH_LIVE = "#d9b978";
 
 	// the history is a ring: oldest sample first, whatever the head is
 	Render.drawGraph = function (context, sim, width, height) {
@@ -599,6 +600,71 @@
 		context.stroke();
 	};
 
+	// ---- bench bars: one bar a row, the same totals the bench panel reads ----
+
+	// In LINE mode the sparkline is not a rate over a window, because the mode is not about
+	// a window: it is the bench, one bar a measured row, the tallest the best line. the bars
+	// are scaled on the rows that finished clean — a row that ran to the cutoff is priced as
+	// the dead weight it is, and its total would flatten every line that actually trades
+	// In LINE mode the sparkline is not a rate over a window, because the mode is not about
+	// a window: it is the bench, one bar a row, the tallest the best line. the scale is set
+	// by the rows that finished clean — a row that ran to the cutoff is priced as the dead
+	// weight it is, and its total would flatten every line that actually trades
+	Render.drawBenchGraph = function (context, bench, width, height) {
+		var slots = bench ? bench.slots : 0;
+		var top = 2;
+		var bottom = height - 2;
+		var lo = 0;
+		var hi = 0;
+		var barW;
+		var zeroY;
+		var i;
+		var v;
+		var y;
+
+		context.clearRect(0, 0, width, height);
+		if (!bench) return;
+
+		for (i = 0; i < slots; i += 1) {
+			if (!bench.used[i] || bench.queued[i] || bench.cut[i]) continue;
+			if (bench.net[i] < lo) lo = bench.net[i];
+			if (bench.net[i] > hi) hi = bench.net[i];
+		}
+		if (hi <= lo) hi = lo + 1;
+		zeroY = bottom - (0 - lo) / (hi - lo) * (bottom - top);
+
+		context.strokeStyle = PLOT_ZERO;
+		context.lineWidth = 1;
+		context.beginPath();
+		context.moveTo(0, Math.round(zeroY) + 0.5);
+		context.lineTo(width, Math.round(zeroY) + 0.5);
+		context.stroke();
+
+		barW = width / slots;
+		for (i = 0; i < slots; i += 1) {
+			if (!bench.used[i]) continue;
+			v = bench.net[i];
+			y = bench.queued[i] ? zeroY : bottom - (v - lo) / (hi - lo) * (bottom - top);
+			if (y < top) y = top;
+			else if (y > bottom) y = bottom;
+			context.fillStyle = barColor(bench, i);
+			if (bench.queued[i]) {
+				context.fillRect(i * barW + 1, zeroY - 1, barW - 2, 2);
+				continue;
+			}
+			context.fillRect(i * barW + 1, Math.min(y, zeroY), barW - 2, Math.max(1, Math.abs(zeroY - y)));
+		}
+	};
+
+	// the live row is the warm one, the best measured row the bright one, a row that ran to
+	// the cutoff the falling one
+	function barColor(bench, i) {
+		if (bench.cut[i]) return GRAPH_DOWN;
+		if (i === bench.best) return GRAPH_UP;
+		if (i === 0) return GRAPH_LIVE;
+		return GRAPH_FLAT;
+	}
+
 	Render.draw = function (view, sim, paused, frameDt, sweep) {
 		var context = view.context;
 		var width = view.width;
@@ -624,7 +690,9 @@
 
 		for (i = 0; i < world.nodeCount; i += 1) drawNode(view, sim, i);
 		drawTrain(view, sim, paused);
-		drawPanel(view, sim, sweep);
+		// in LINE mode the sweep is idle and the bench panel (DOM) holds the corner: the
+		// measured grid and the measured line are both instruments, and only one is asked
+		if (!sim.lineOn) drawPanel(view, sim, sweep);
 	};
 
 	RR.Render = Render;

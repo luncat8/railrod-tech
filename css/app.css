@@ -425,7 +425,7 @@ button {
 
 .capabilities {
 	display: flex;
-	max-width: 516px;
+	max-width: 600px;
 	margin-top: 40px;
 	padding-top: 20px;
 	border-top: 1px solid var(--line);
@@ -719,6 +719,259 @@ button {
 	text-align: right;
 }
 
+/* ---- the line bench: N lines on one world, each totalled over the same length ---- */
+
+.bench-panel {
+	position: absolute;
+	top: 14px;
+	right: 14px;
+	z-index: 2;
+	display: flex;
+	overflow: hidden;
+	width: 264px;
+	max-height: calc(100% - 28px);
+	flex-direction: column;
+	gap: 7px;
+	padding: 10px 11px 9px;
+	border: 1px solid rgba(183, 198, 183, 0.16);
+	border-radius: 8px;
+	background: rgba(14, 18, 15, 0.88);
+	box-shadow: 0 16px 46px rgba(0, 0, 0, 0.4);
+	backdrop-filter: blur(10px);
+	font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.bench-panel[hidden] {
+	display: none;
+}
+
+.bench-head {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 8px;
+}
+
+.bench-title {
+	color: var(--accent);
+	font-size: 9px;
+	font-weight: 700;
+	letter-spacing: 0.14em;
+}
+
+.bench-meta {
+	color: var(--muted);
+	font-size: 8px;
+	letter-spacing: 0.06em;
+	white-space: nowrap;
+}
+
+.bench-controls {
+	display: flex;
+	flex-direction: column;
+	gap: 5px;
+	padding-bottom: 8px;
+	border-bottom: 1px solid var(--line);
+}
+
+.bench-control {
+	display: flex;
+	align-items: center;
+	gap: 7px;
+}
+
+.bench-control .control-label {
+	width: 42px;
+	font-size: 7px;
+}
+
+.bench-control input[type="range"] {
+	width: auto;
+	height: 3px;
+	flex: 1 1 auto;
+	margin: 0;
+	accent-color: var(--accent);
+	cursor: pointer;
+}
+
+.bench-control output {
+	min-width: 44px;
+	color: var(--accent-strong);
+	font-size: 9px;
+	font-variant-numeric: tabular-nums;
+	text-align: right;
+}
+
+.bench-cols,
+.bench-row {
+	display: grid;
+	align-items: baseline;
+	grid-template-columns: 32px 1fr 58px 42px;
+	gap: 5px;
+}
+
+.bench-cols {
+	color: var(--subtle);
+	font-size: 7px;
+	letter-spacing: 0.08em;
+}
+
+.bench-cols .bench-num,
+.bench-net,
+.bench-time {
+	text-align: right;
+}
+
+.bench-rows {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+
+.bench-row {
+	width: 100%;
+	padding: 2.5px 3px;
+	border: 0;
+	border-left: 2px solid transparent;
+	border-radius: 3px;
+	background: transparent;
+	color: #c3ccc2;
+	font: inherit;
+	font-size: 9px;
+	text-align: left;
+}
+
+button.bench-row {
+	cursor: pointer;
+}
+
+button.bench-row:hover,
+button.bench-row:focus-visible {
+	outline: none;
+	background: rgba(255, 255, 255, 0.045);
+}
+
+.bench-mark {
+	color: var(--muted);
+	font-size: 8px;
+	letter-spacing: 0.06em;
+}
+
+.bench-build {
+	overflow: hidden;
+	color: #9aa79b;
+	font-size: 8.5px;
+	white-space: nowrap;
+}
+
+.bench-net,
+.bench-time {
+	font-variant-numeric: tabular-nums;
+}
+
+.bench-net {
+	color: #dce4db;
+}
+
+.bench-time {
+	color: var(--muted);
+}
+
+/* the live row is the player's own build; the best measured one is the answer */
+.bench-row.is-live {
+	border-left-color: var(--warm);
+}
+
+.bench-row.is-live .bench-mark {
+	color: var(--warm);
+}
+
+.bench-row.is-best {
+	border-left-color: var(--accent);
+	background: rgba(169, 214, 142, 0.07);
+}
+
+.bench-row.is-best .bench-net {
+	color: var(--accent-strong);
+	font-weight: 700;
+}
+
+/* a row that ran to the cutoff never finished the line clean: it reads as a loss */
+.bench-row.is-cut .bench-net,
+.bench-row.is-cut .bench-time,
+.bench-row.is-cut .bench-mark {
+	color: #d98a78;
+}
+
+.bench-row.is-pending {
+	opacity: 0.5;
+}
+
+.bench-row.is-empty {
+	opacity: 0.34;
+}
+
+.bench-foot {
+	display: flex;
+	align-items: center;
+	gap: 7px;
+	padding-top: 8px;
+	border-top: 1px solid var(--line);
+}
+
+.bench-status {
+	color: var(--muted);
+	font-size: 8px;
+	letter-spacing: 0.06em;
+	white-space: nowrap;
+}
+
+.bench-bar {
+	position: relative;
+	overflow: hidden;
+	height: 3px;
+	flex: 1 1 auto;
+	border-radius: 2px;
+	background: rgba(183, 198, 183, 0.14);
+}
+
+.bench-bar i {
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	left: 0;
+	width: 0;
+	background: var(--accent);
+}
+
+.bench-button {
+	padding: 3px 6px;
+	border: 1px solid rgba(169, 214, 142, 0.28);
+	border-radius: 4px;
+	background: rgba(169, 214, 142, 0.07);
+	color: var(--accent-strong);
+	font: inherit;
+	font-size: 8px;
+	font-weight: 700;
+	letter-spacing: 0.08em;
+	white-space: nowrap;
+	cursor: pointer;
+	transition: border-color 140ms ease, background 140ms ease;
+}
+
+.bench-button:hover,
+.bench-button:focus-visible {
+	outline: none;
+	border-color: rgba(192, 233, 166, 0.65);
+	background: rgba(169, 214, 142, 0.15);
+}
+
+.bench-hint {
+	color: var(--subtle);
+	font-size: 7px;
+	letter-spacing: 0.07em;
+}
+
 @media (max-width: 1020px) {
 	.hud-top {
 		gap: 16px;
@@ -865,6 +1118,28 @@ button {
 
 	.capability-label {
 		font-size: 7px;
+	}
+
+	.bench-panel {
+		top: 10px;
+		right: 10px;
+		width: 214px;
+		gap: 5px;
+		padding: 8px 9px 7px;
+	}
+
+	.bench-cols,
+	.bench-row {
+		grid-template-columns: 26px 1fr 48px 34px;
+		gap: 4px;
+	}
+
+	.bench-build {
+		font-size: 8px;
+	}
+
+	.bench-hint {
+		display: none;
 	}
 
 	.next-step {

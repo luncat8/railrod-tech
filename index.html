@@ -18,7 +18,7 @@
 					<strong>RAILROD</strong>
 					<span>RAIL ECONOMY / LOOP TRADE</span>
 				</div>
-				<div class="build-badge"><span></span>PROTOTYPE 0.1.7</div>
+				<div class="build-badge"><span></span>PROTOTYPE 0.1.8</div>
 			</div>
 
 			<div class="runtime-controls">
@@ -55,6 +55,13 @@
 					</span>
 				</label>
 
+				<div class="control-divider" aria-hidden="true"></div>
+
+				<label class="animate-control" for="line-input" title="Fixed-length line: total the whole line instead of averaging a window">
+					<input id="line-input" type="checkbox" aria-label="Fixed-length line mode">
+					<span class="control-label">LINE</span>
+				</label>
+
 				<button id="pause-button" class="pause-button" type="button" aria-pressed="false">
 					<span id="pause-icon" class="pause-icon" aria-hidden="true">Ⅱ</span>
 					<span id="pause-label">PAUSE</span>
@@ -65,11 +72,45 @@
 		<main class="stage">
 			<canvas id="c" aria-hidden="true"></canvas>
 			<div id="node-label" class="node-label" hidden></div>
+
+			<aside id="bench-panel" class="bench-panel" hidden aria-label="Line bench">
+				<div class="bench-head">
+					<span class="bench-title">LINE BENCH</span>
+					<span id="bench-line" class="bench-meta">128 KM · SEED 0</span>
+				</div>
+				<div class="bench-controls">
+					<label class="bench-control" for="laps-input">
+						<span class="control-label">LENGTH</span>
+						<input id="laps-input" type="range" min="1" max="4" step="1" value="2" aria-label="Line length, in laps of the ring">
+						<output id="laps-value" for="laps-input">128 KM</output>
+					</label>
+					<label class="bench-control" for="slots-input">
+						<span class="control-label">LINES</span>
+						<input id="slots-input" type="range" min="2" max="8" step="1" value="4" aria-label="Lines on the bench">
+						<output id="slots-value" for="slots-input">4</output>
+					</label>
+				</div>
+				<div class="bench-cols">
+					<span>SLOT</span>
+					<span>W · G · D · E</span>
+					<span class="bench-num">NET CR</span>
+					<span class="bench-num">TIME S</span>
+				</div>
+				<div id="bench-rows" class="bench-rows"></div>
+				<div class="bench-foot">
+					<span id="bench-status" class="bench-status">MEASURED 0/4</span>
+					<span class="bench-bar"><i id="bench-bar"></i></span>
+					<button id="bench-add" class="bench-button" type="button" title="Put the live build on the bench">+ ROW</button>
+					<button id="bench-run" class="bench-button" type="button" title="Run the live line again">↻ RUN</button>
+				</div>
+				<div class="bench-hint">ONE WORLD, ONE TRAIN A ROW · CLICK A ROW TO RUN IT</div>
+			</aside>
+
 			<div class="stage-content">
 				<section class="intro" aria-labelledby="intro-title">
 					<div class="eyebrow"><span class="eyebrow-mark"></span>PHASE 01 <span class="eyebrow-slash">/</span> OPTIMUM EMERGENCE</div>
 					<h1 id="intro-title">The train never<br>turns <em>back.</em></h1>
-					<p class="intro-copy">A seeded ring of fourteen nodes wraps 64 km of track. The train runs one way round it and stops only where it can trade: unloading into a consumer that needs its cargo, or loading from a source at a margin. Money is not limited, so the number to watch is NET/S — trade profit per second less the build's capex, amortised. The panel top right re-runs the loop headlessly over a 9 × 9 × 3 grid of gauge, wheel and engine: every dot is a build measured in the sim, the crosshair is yours. Slide a knob and see how far off the measured optimum you sit.</p>
+					<p class="intro-copy">A seeded ring of fourteen nodes wraps 64 km of track. The train runs one way round it and stops only where it can trade: unloading into a consumer that needs its cargo, or loading from a source at a margin. Money is not limited, so the number to watch is NET/S — trade profit per second less the build's capex, amortised. The panel top right re-runs the loop headlessly over a 9 × 9 × 3 grid of gauge, wheel and engine: every dot is a build measured in the sim, the crosshair is yours. Slide a knob and see how far off the measured optimum you sit. Tick <strong>LINE</strong> and the panel becomes a bench instead: a fixed length of track, totalled rather than averaged, run by as many trains as you like on the same world.</p>
 
 					<div class="capabilities" aria-label="Runtime capabilities">
 						<div class="capability">
@@ -92,13 +133,18 @@
 							<span class="capability-label">BUILD SWEEP</span>
 							<strong>9 × 9 × 3</strong>
 						</div>
+						<div class="capability">
+							<span class="capability-index">05</span>
+							<span class="capability-label">LINE BENCH</span>
+							<strong>2–8 <small>lines</small></strong>
+						</div>
 					</div>
 				</section>
 
 				<aside class="next-step" aria-label="Next milestone">
 					<span class="next-step-label">UP NEXT</span>
-					<strong>Build curves</strong>
-					<span class="next-step-meta">MILESTONE 0.1.7 <span>↗</span></span>
+					<strong>Line bench</strong>
+					<span class="next-step-meta">MILESTONE 0.1.8 <span>↗</span></span>
 				</aside>
 			</div>
 		</main>
@@ -141,29 +187,29 @@
 
 			<div class="telemetry-group">
 				<div class="telemetry-item telemetry-item--net" id="net-item">
-					<span class="telemetry-label">NET / S</span>
-					<strong><span id="net-value">+0.00</span><small> CR/S</small></strong>
+					<span class="telemetry-label" id="net-label">NET / S</span>
+					<strong><span id="net-value">+0.00</span><small id="net-unit"> CR/S</small></strong>
 					<span id="net-delta" class="net-delta">FLAT</span>
 				</div>
 				<canvas id="net-graph" class="net-graph" width="184" height="38" aria-hidden="true"></canvas>
 				<div class="telemetry-item">
-					<span class="telemetry-label">PROFIT / S</span>
-					<strong><span id="profit-value">+0.00</span><small> CR/S</small></strong>
+					<span class="telemetry-label" id="profit-label">PROFIT / S</span>
+					<strong><span id="profit-value">+0.00</span><small id="profit-unit"> CR/S</small></strong>
 				</div>
 				<div class="telemetry-item">
-					<span class="telemetry-label">CAPEX / S</span>
-					<strong><span id="capex-value">-0.00</span><small> CR/S</small></strong>
+					<span class="telemetry-label" id="capex-label">CAPEX / S</span>
+					<strong><span id="capex-value">-0.00</span><small id="capex-unit"> CR/S</small></strong>
 				</div>
 				<div class="telemetry-item">
-					<span class="telemetry-label">AVG / S</span>
-					<strong><span id="avg-value">+0.00</span><small> CR/S</small></strong>
+					<span class="telemetry-label" id="avg-label">AVG / S</span>
+					<strong><span id="avg-value">+0.00</span><small id="avg-unit"> CR/S</small></strong>
 				</div>
 				<div class="telemetry-item telemetry-item--optimum">
-					<span class="telemetry-label">OPTIMUM / S</span>
-					<strong><span id="optimum-value">—</span><small> CR/S</small></strong>
+					<span class="telemetry-label" id="optimum-label">OPTIMUM / S</span>
+					<strong><span id="optimum-value">—</span><small id="optimum-unit"> CR/S</small></strong>
 				</div>
 				<div class="telemetry-item telemetry-item--optimum">
-					<span class="telemetry-label">OPTIMUM BUILD G·D·E</span>
+					<span class="telemetry-label" id="optimum-build-label">OPTIMUM BUILD G·D·E</span>
 					<strong id="optimum-build">—</strong>
 				</div>
 				<div class="telemetry-item">
@@ -212,6 +258,7 @@
 	<script src="./js/tech.js"></script>
 	<script src="./js/trade.js"></script>
 	<script src="./js/train.js"></script>
+	<script src="./js/line.js"></script>
 	<script src="./js/sim.js"></script>
 	<script src="./js/plot.js"></script>
 	<script src="./js/sweep.js"></script>

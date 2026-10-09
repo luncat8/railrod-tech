@@ -8,6 +8,7 @@ var Economy = require("../js/economy.js");
 require("../js/tech.js");
 require("../js/trade.js");
 require("../js/train.js");
+require("../js/line.js");
 var Sim = require("../js/sim.js");
 
 var DT = Const.DT;

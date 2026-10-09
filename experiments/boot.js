@@ -28,9 +28,13 @@ function fakeElement(id) {
 		disabled: false,
 		checked: false,
 		dataset: {},
-		textContent: "",
 		innerHTML: "",
 		hidden: true,
+		className: "",
+		title: "",
+		type: "",
+		children: [],
+		text: "",
 		style: {},
 		handlers: {},
 		offsetWidth: 220,
@@ -56,6 +60,10 @@ function fakeElement(id) {
 			if (!el.handlers[type]) el.handlers[type] = [];
 			el.handlers[type].push(fn);
 		},
+		appendChild: function (child) {
+			el.children.push(child);
+			return child;
+		},
 		closest: function () { return el; },
 		getBoundingClientRect: function () {
 			return { left: 0, top: 0, width: 1200, height: 700 };
@@ -72,16 +80,31 @@ function fakeElement(id) {
 			remove: function () {}
 		}
 	};
+	// clearing an element's text clears its children, which is how the bench rebuilds rows
+	Object.defineProperty(el, "textContent", {
+		get: function () { return el.text; },
+		set: function (value) {
+			el.text = value;
+			el.children.length = 0;
+		}
+	});
 	return el;
 }
 
 var elements = {};
 var rafCallback = null;
 
+var created = 0;
+
 globalThis.document = {
 	getElementById: function (id) {
 		if (!elements[id]) elements[id] = fakeElement(id);
 		return elements[id];
+	},
+	// the bench panel builds its rows out of elements, so the stub has to hand them out
+	createElement: function (tag) {
+		created += 1;
+		return fakeElement(tag + created);
 	}
 };
 globalThis.requestAnimationFrame = function (cb) {
@@ -110,6 +133,7 @@ var RR = globalThis.RR;
 var Const = require("../js/const.js");
 var Tech = require("../js/tech.js");
 var Train = require("../js/train.js");
+var Line = RR.Line;
 var inspect = Main.inspect;
 var c;
 var target;
@@ -285,6 +309,123 @@ assert.strictEqual(typeof elements["net-item"].classList.flags["is-up"], "boolea
 assert(Number(elements["rate-value"].textContent) > 1, "the measured sim rate is reported");
 assert(elements["net-graph"].width > 0, "the sparkline canvas is sized");
 
+// ---- LINE mode: a fixed-length line totalled, and the bench of N of them ----
+// the mode swaps the meaning of the footer's own rows and puts the bench in the sweep's
+// corner, so what is checked is that the page reads as one instrument before and after
+var lineInput = elements["line-input"];
+var benchPanel = elements["bench-panel"];
+var rowsBox = elements["bench-rows"];
+var netLabel = elements["net-label"];
+var bench;
+var row;
+var barsDrawn = 0;
+var sweepDone;
+var realBenchGraph = RR.Render.drawBenchGraph;
+
+assert.strictEqual(lineInput.checked, false, "the page opens on the rolling average");
+assert.strictEqual(benchPanel.hidden, true, "with no bench on screen");
+assert.strictEqual(netLabel.textContent, "NET / S", "and a rate for a headline");
+
+lineInput.checked = true;
+lineInput.handlers["change"][0]({ target: lineInput });
+bench = inspect().bench;
+assert.strictEqual(inspect().sim.lineOn, true, "the LINE checkbox turns the mode on");
+assert.strictEqual(benchPanel.hidden, false, "the bench takes the corner");
+assert.strictEqual(netLabel.textContent, "LINE NET", "and the headline becomes a total");
+assert.strictEqual(elements["profit-label"].textContent, "LINE TRADE", "the rows keep their places");
+assert.strictEqual(elements["capex-label"].textContent, "LINE CAPEX", "and change their meaning");
+assert.strictEqual(elements["avg-label"].textContent, "LINE TIME", "to the line's own numbers");
+assert.strictEqual(elements["optimum-label"].textContent, "BENCH BEST", "with the bench for an optimum");
+assert.strictEqual(elements["smooth-input"].disabled, true, "a total has no window to smooth");
+assert.strictEqual(elements["laps-value"].textContent, Const.LINE_LAPS_DEFAULT * Const.RING_KM + " KM",
+	"the length reads as the distance it is");
+
+// MAX mode is the point of the bench: a row is measured in frames, not in minutes
+sweepDone = inspect().sweep.done;
+for (i = 0; i < 40; i += 1) frame();
+assert.strictEqual(rowsBox.children.length, Const.LINE_SLOT_DEFAULT, "the bench builds a row a line");
+assert.strictEqual(bench.measured, Line.rowsUsed(bench), "and measures every row of them");
+assert.strictEqual(inspect().sweep.done, sweepDone, "while the sweep hands over its budget");
+assert.strictEqual(inspect().sim.line.done, true, "the live line finishes inside a few MAX frames");
+row = rowsBox.children[0];
+assert.strictEqual(row.children[0].textContent, "LIVE", "the first row is the build being run");
+assert(/^[+-]?\d+\.\d\d$/.test(row.children[2].textContent), "a row reads its total");
+assert(/^\d+\.\d$/.test(row.children[3].textContent), "and the seconds the line took");
+assert.strictEqual(elements["net-value"].textContent, row.children[2].textContent,
+	"the headline is the live row: one line, measured twice, read the same");
+assert.strictEqual(elements["avg-value"].textContent, inspect().sim.line.seconds.toFixed(1),
+	"and the time is the line's own");
+assert(/ CR · \d+\/\d+ KM$/.test(elements["net-unit"].textContent), "the total carries the distance");
+
+// a parameter change is a new line: the total restarts, and the rows behind it do not move
+input("gauge-input", 1);
+assert.strictEqual(inspect().sim.line.done, false, "a knob change starts the line over");
+assert.strictEqual(elements["gauge-value"].textContent, "4.00 M", "in LINE mode too");
+for (i = 0; i < 40; i += 1) frame();
+assert.strictEqual(inspect().sim.line.done, true, "and the new line finishes");
+assert(bench.queued[0] === 0, "the live row is measured again behind it");
+
+// + ROW puts the build beside itself, so the next slider move can be read against it
+elements["bench-add"].handlers["click"][0]({ target: elements["bench-add"], currentTarget: elements["bench-add"] });
+assert.strictEqual(Line.rowsUsed(bench), 2, "+ ROW puts the live build on the bench");
+assert.strictEqual(rowsBox.children[1].children[2].textContent, "…",
+	"a row with no measurement yet says so rather than showing an old one");
+input("gauge-input", 0.5);
+for (i = 0; i < 60; i += 1) frame();
+assert.strictEqual(bench.measured, Line.rowsUsed(bench), "the bench measures the captured row");
+assert.strictEqual(bench.knobs[1][Tech.GAUGE], 1, "and the row kept the build it was given");
+assert(/^[+-]?\d+\.\d\d$/.test(rowsBox.children[1].children[2].textContent, "the captured row reads its total"));
+
+// a row is a build to run: clicking it hands the whole consist over, and the sliders follow
+row = rowsBox.children[1];
+row.handlers["click"][0]({ target: row, currentTarget: row });
+assert.strictEqual(inspect().sim.trains[0].wagons, bench.wagons[1], "clicking a row runs that train");
+assert.strictEqual(inspect().sim.knobs[Tech.GAUGE], bench.knobs[1][Tech.GAUGE], "on that build");
+assert.strictEqual(elements["gauge-value"].textContent, "4.00 M", "and the footer says so");
+assert.strictEqual(inspect().sim.line.done, false, "which starts the line over");
+
+// the bench's own controls: a longer line, more rows
+input("laps-input", Const.LINE_LAPS_MAX);
+assert.strictEqual(elements["laps-value"].textContent, Const.LINE_LAPS_MAX * Const.RING_KM + " KM",
+	"the length slider reads the line it set");
+assert.strictEqual(bench.meter.targetKm, Const.LINE_LAPS_MAX * Const.RING_KM, "and the line is that long");
+assert.strictEqual(inspect().sim.line.targetKm, Const.LINE_LAPS_MAX * Const.RING_KM, "for the live run too");
+input("slots-input", Const.LINE_SLOT_MAX);
+assert.strictEqual(rowsBox.children.length, Const.LINE_SLOT_MAX, "the bench builds the rows it was asked for");
+input("slots-input", Const.LINE_SLOT_DEFAULT);
+assert.strictEqual(rowsBox.children.length, Const.LINE_SLOT_DEFAULT, "and takes them back");
+
+// ↻ RUN is the live line again, and the sparkline is the bench rather than a window
+elements["bench-run"].handlers["click"][0]({ target: elements["bench-run"], currentTarget: elements["bench-run"] });
+assert.strictEqual(inspect().sim.line.done, false, "↻ RUN starts the live line again");
+RR.Render.drawBenchGraph = function () { barsDrawn += 1; return realBenchGraph.apply(null, arguments); };
+for (i = 0; i < 40; i += 1) frame();
+assert(barsDrawn > 0, "the sparkline draws the bench in LINE mode");
+RR.Render.drawBenchGraph = realBenchGraph;
+
+// the run modes are orthogonal: the bench measures beside the animated clock too
+elements["animate-input"].checked = true;
+elements["animate-input"].handlers["change"][0]({ target: elements["animate-input"] });
+for (i = 0; i < 30; i += 1) frame();
+assert(inspect().sim.lineOn, "LINE mode survives the animation being turned on");
+assert(bench.measured > 0, "and the bench measures beside the clock");
+elements["animate-input"].checked = false;
+elements["animate-input"].handlers["change"][0]({ target: elements["animate-input"] });
+for (i = 0; i < 40; i += 1) frame();
+
+// and the mode is a toggle: the rates, the window and the sweep all come back
+lineInput.checked = false;
+lineInput.handlers["change"][0]({ target: lineInput });
+assert.strictEqual(inspect().sim.lineOn, false, "the checkbox turns the mode off");
+assert.strictEqual(benchPanel.hidden, true, "the bench goes away");
+assert.strictEqual(netLabel.textContent, "NET / S", "the rates come back");
+assert.strictEqual(elements["smooth-input"].disabled, false, "with the window that smooths them");
+assert.strictEqual(elements["net-unit"].textContent, " CR/S", "and the units they are read in");
+sweepDone = inspect().sweep.done;
+for (i = 0; i < 40; i += 1) frame();
+assert(inspect().sweep.done > sweepDone || inspect().sweep.running, "and the sweep takes its budget back");
+assert(/^[+-]?\d+\.\d\d$/.test(elements["net-value"].textContent), "the headline is a rate again");
+
 // ---- build curves ----
 // every control has a plot, and touching the control is what shows it
 var plotBox = elements["build-plot"];
@@ -314,4 +455,4 @@ frame();
 assert.strictEqual(elements["cargo-value"].textContent.split("/")[1], String(Train.capacity(inspect().sim.trains[0])),
 	"cargo reads against the consist's hold");
 
-console.log("Boot checks passed: page boots headless from the script list in index.html, MAX and animated modes, the smoothing slider and the trend, a plot for every build control, hover label, wagons and knob sliders respond, capex, cargo and the sweep's optimum readout update, the loop trades.");
+console.log("Boot checks passed: page boots headless from the script list in index.html, MAX and animated modes, the smoothing slider and the trend, LINE mode with its totals and its bench of rows, a plot for every build control, hover label, wagons and knob sliders respond, capex, cargo and the sweep's optimum readout update, the loop trades.");

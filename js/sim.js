@@ -31,6 +31,10 @@
 			historyHead: 0
 		};
 
+		// the fixed-length line: off until the player asks for it, and then a total over
+		// one line instead of a rate over a window
+		sim.lineOn = false;
+		sim.line = RR.Line.createMeter();
 		Sim.reset(sim, value);
 		return sim;
 	};
@@ -48,15 +52,26 @@
 		// array shape reserved for the 0.2 competitor trains; one train today
 		if (!sim.trains) sim.trains = [RR.Train.create(RR.Tech.derive(sim.knobs), C.WAGON_DEFAULT)];
 		RR.Train.reset(sim.trains[0], sim.world);
-		sim.cashSeen = 0;
+		Sim.anchor(sim);
+		RR.Line.begin(sim.line);
+	};
+
+	// the rolling readouts start over: a new world, or a new line, is not a trend. the
+	// ledger the flow is read against is the train's cash where it stands, so the load a
+	// reset lifts at node 0 is charged to the line and not to the first step after it
+	Sim.anchor = function (sim) {
+		var trains = sim.trains;
+		var cash = 0;
+		var i;
+
+		for (i = 0; i < trains.length; i += 1) cash += trains[i].cash;
+		sim.cashSeen = cash;
 		sim.profitRate = 0;
-		sim.netMean = 0;
-		sim.netTrend = 0;
-		Sim.refreshCapex(sim);
 		sim.history.fill(0);
 		sim.historyCount = 0;
 		sim.historyHead = 0;
 		sim.historyClock = 0;
+		Sim.refreshCapex(sim);
 	};
 
 	// capex is amortised, so only a build change moves it; never per step
@@ -151,6 +166,9 @@
 		// after the transfers, so a frame never shows a yard one step behind its cargo
 		RR.Economy.refreshPrices(sim.world);
 		updateProfit(sim, dt);
+		// a latched line stops being measured: the train runs on past the finish, and the
+		// total the player reads stays the one the line earned
+		if (sim.lineOn && !sim.line.done) RR.Line.observe(sim.line, trains[0], dt);
 	};
 
 	RR.Sim = Sim;

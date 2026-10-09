@@ -9,6 +9,7 @@ require("../js/economy.js");
 var Tech = require("../js/tech.js");
 var Trade = require("../js/trade.js");
 var Train = require("../js/train.js");
+require("../js/line.js");
 var Sim = require("../js/sim.js");
 
 var DT = Const.DT;
@@ -303,6 +304,74 @@ function testKnobChangeNeverTeleports() {
 	}
 }
 
+// the trip ledger is what a fixed-length line is measured against, so it has to count the
+// run and nothing else: forward only, closed by a delivered consist, zeroed by a new line
+function testTheTripLedger() {
+	var world = lineWorld(12);
+	var train = freshTrain(4);
+	var km;
+	var stops;
+	var cycle;
+	var i;
+
+	parkAtSource(train, world);
+	assert.strictEqual(train.km, 0, "a parked train has run nothing");
+	assert.strictEqual(train.stops, 1, "the stop it parked at counts, because it traded there");
+	assert(train.units > 0, "and the units it lifted count with it");
+	assert.strictEqual(train.cycle, 0, "leaving a stop loaded opens a cycle rather than closing one");
+
+	for (i = 0; i < 60 * 60; i += 1) {
+		km = train.km;
+		stops = train.stops;
+		cycle = train.cycle;
+		Train.step(train, world, DT);
+		assert(train.km >= km, "the odometer only runs forward");
+		assert(train.stops >= stops, "a stop is never uncounted");
+		assert(train.cycle >= cycle, "and neither is a closed cycle");
+	}
+	assert(train.km > 12, "the ledger measures the ground the loop covered (" + train.km.toFixed(1) + " km)");
+	assert(train.cycle > 0, "a consist delivered empty closes a cycle");
+	assert(train.units >= train.stops, "every counted stop moved at least one unit");
+
+	Train.reset(train, world);
+	assert.strictEqual(train.km, 0, "a new line starts the ledger again");
+	assert.strictEqual(train.cycle, 0, "with no cycle closed yet");
+	assert.strictEqual(train.stops, 1, "and the stop it starts at counted");
+}
+
+// a build handed to a reset is the build taken: the consist is empty at that moment, so the
+// wagon count is the one asked for and not one clamped by what the last build left aboard
+function testResetTakesTheBuildItIsGiven() {
+	var world = lineWorld(12);
+	var train = freshTrain(8);
+	var knobs = Tech.defaultKnobs();
+	var build;
+
+	parkAtSource(train, world);
+	assert(train.cargoUnits > 4, "the train parked loaded with more than the new consist can hold");
+	knobs[Tech.GAUGE] = 1;
+	build = Tech.derive(knobs);
+	Train.reset(train, world, build, 2);
+	assert.strictEqual(train.wagons, 2, "a reset takes the wagon count it is given");
+	assert.strictEqual(train.build.vTrack, build.vTrack, "and the build with it");
+	assert.strictEqual(train.capexRate, Tech.capexRate(build, 2), "priced as the consist it now is");
+	assert(train.cargoUnits <= Train.capacity(train), "loading again, it lifts no more than the new hold");
+	assert.strictEqual(train.km, 0, "on a ledger that starts at zero");
+}
+
+// a stop that moves nothing is not a stop, and it does not close a trade cycle either
+function testAnEmptyStopClosesNothing() {
+	var world = lineWorld(12, 0);
+	var train = freshTrain(4);
+	var i;
+
+	parkAtSource(train, world);
+	assert.strictEqual(train.stops, 0, "a source with nothing to give is not a stop");
+	assert.strictEqual(train.units, 0, "and moves no units");
+	for (i = 0; i < 60 * 30; i += 1) Train.step(train, world, DT);
+	assert.strictEqual(train.cycle, 0, "so no cycle is ever closed");
+}
+
 function testDeterminism() {
 	var a = Sim.create(SEED);
 	var b = Sim.create(SEED);
@@ -316,6 +385,10 @@ function testDeterminism() {
 	assert.strictEqual(a.trains[0].v, b.trains[0].v, "same steps, same speed");
 	assert.strictEqual(a.trains[0].cash, b.trains[0].cash, "same steps, same cash");
 	assert.strictEqual(a.trains[0].cargoUnits, b.trains[0].cargoUnits, "same steps, same cargo");
+	assert.strictEqual(a.trains[0].km, b.trains[0].km, "same steps, same distance run");
+	assert.strictEqual(a.trains[0].stops, b.trains[0].stops, "same steps, same stops");
+	assert.strictEqual(a.trains[0].units, b.trains[0].units, "same steps, same units moved");
+	assert.strictEqual(a.trains[0].cycle, b.trains[0].cycle, "same steps, same cycles closed");
 	assert.strictEqual(a.netRate, b.netRate, "same steps, same net rate");
 }
 
@@ -330,5 +403,8 @@ testStalledBuildSitsAtZero();
 testSetWagonsNeverDropsCargo();
 testSetWagonsFloorFollowsTheHighestLoadedWagon();
 testKnobChangeNeverTeleports();
+testTheTripLedger();
+testResetTakesTheBuildItIsGiven();
+testAnEmptyStopClosesNothing();
 testDeterminism();
-console.log("Train checks passed: one-way loop, wanted-only stops, exact braked stops, late stops, no-stop cruise, transfer dwell, wagon floor, knob change, determinism.");
+console.log("Train checks passed: one-way loop, wanted-only stops, exact braked stops, late stops, no-stop cruise, transfer dwell, wagon floor, knob change, the trip ledger, a build taken at a reset, determinism.");

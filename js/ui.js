@@ -11,6 +11,30 @@
 	var smoothInput = null;
 	var smoothValue = null;
 	var animateInput = null;
+	var lineInput = null;
+	var lapsInput = null;
+	var lapsValue = null;
+	var slotsInput = null;
+	var slotsValue = null;
+	var benchPanel = null;
+	var benchLine = null;
+	var benchRows = null;
+	var benchStatus = null;
+	var benchBar = null;
+	var rows = [];
+	var rowsBuilt = 0;
+	var netLabel = null;
+	var netUnit = null;
+	var profitLabel = null;
+	var profitUnit = null;
+	var capexLabel = null;
+	var capexUnit = null;
+	var avgLabel = null;
+	var avgUnit = null;
+	var optimumLabel = null;
+	var optimumUnit = null;
+	var optimumBuildLabel = null;
+	var smoothControl = null;
 	var wagonsInput = null;
 	var wagonsValue = null;
 	var knobInputs = null;
@@ -63,6 +87,10 @@
 	var displayedCapex = "";
 	var displayedOptimum = "";
 	var displayedOptimumBuild = "";
+	var displayedNetUnit = "";
+	var displayedBenchHead = "";
+	var displayedBenchStatus = "";
+	var displayedBenchBar = -1;
 
 	var RES_NAMES = ["R1", "R2", "R3"];
 
@@ -112,6 +140,31 @@
 		controller.setAnimate(animateInput.checked);
 	}
 
+	function onLineChange() {
+		controller.setLineMode(lineInput.checked);
+	}
+
+	function onLapsInput() {
+		controller.setLaps(Number(lapsInput.value));
+	}
+
+	function onSlotsInput() {
+		controller.setSlots(Number(slotsInput.value));
+	}
+
+	function onBenchAdd() {
+		controller.captureBench();
+	}
+
+	function onBenchRun() {
+		controller.runLine();
+	}
+
+	// a row is a build the player put on the bench; clicking it runs it
+	function onBenchRowClick(event) {
+		controller.applySlot(Number(event.currentTarget.dataset.slot));
+	}
+
 	function onPauseClick() {
 		controller.togglePause();
 	}
@@ -148,7 +201,7 @@
 		knobValues[slot] = document.getElementById(valueId);
 	}
 
-	UI.bind = function (main, sim, speed) {
+	UI.bind = function (main, sim, speed, bench) {
 		controller = main;
 		knobInputs = [];
 		knobValues = [];
@@ -158,7 +211,29 @@
 		speedControl = speedInput.closest(".speed-control");
 		smoothInput = document.getElementById("smooth-input");
 		smoothValue = document.getElementById("smooth-value");
+		smoothControl = smoothInput.closest(".speed-control");
 		animateInput = document.getElementById("animate-input");
+		lineInput = document.getElementById("line-input");
+		lapsInput = document.getElementById("laps-input");
+		lapsValue = document.getElementById("laps-value");
+		slotsInput = document.getElementById("slots-input");
+		slotsValue = document.getElementById("slots-value");
+		benchPanel = document.getElementById("bench-panel");
+		benchLine = document.getElementById("bench-line");
+		benchRows = document.getElementById("bench-rows");
+		benchStatus = document.getElementById("bench-status");
+		benchBar = document.getElementById("bench-bar");
+		netLabel = document.getElementById("net-label");
+		netUnit = document.getElementById("net-unit");
+		profitLabel = document.getElementById("profit-label");
+		profitUnit = document.getElementById("profit-unit");
+		capexLabel = document.getElementById("capex-label");
+		capexUnit = document.getElementById("capex-unit");
+		avgLabel = document.getElementById("avg-label");
+		avgUnit = document.getElementById("avg-unit");
+		optimumLabel = document.getElementById("optimum-label");
+		optimumUnit = document.getElementById("optimum-unit");
+		optimumBuildLabel = document.getElementById("optimum-build-label");
 		wagonsInput = document.getElementById("wagons-input");
 		wagonsValue = document.getElementById("wagons-value");
 		trainSpeedValue = document.getElementById("train-speed-value");
@@ -194,6 +269,11 @@
 		speedInput.addEventListener("input", onSpeedInput);
 		smoothInput.addEventListener("input", onSmoothInput);
 		animateInput.addEventListener("change", onAnimateChange);
+		lineInput.addEventListener("change", onLineChange);
+		lapsInput.addEventListener("input", onLapsInput);
+		slotsInput.addEventListener("input", onSlotsInput);
+		document.getElementById("bench-add").addEventListener("click", onBenchAdd);
+		document.getElementById("bench-run").addEventListener("click", onBenchRun);
 		wagonsInput.addEventListener("input", onWagonsInput);
 		wagonsInput.addEventListener("pointerdown", onControl);
 		wagonsInput.addEventListener("focus", onControl);
@@ -204,6 +284,8 @@
 
 		bindRange(speedInput, RR.Const.MIN_SPEED, RR.Const.MAX_SPEED);
 		bindRange(smoothInput, RR.Const.SMOOTH_MIN_S, RR.Const.SMOOTH_MAX_S);
+		bindRange(lapsInput, RR.Const.LINE_LAPS_MIN, RR.Const.LINE_LAPS_MAX);
+		bindRange(slotsInput, RR.Const.LINE_SLOT_MIN, RR.Const.LINE_SLOT_MAX);
 		wagonsInput.dataset.plot = String(RR.Plot.WAGONS);
 		UI.setSeed(sim.seed);
 		UI.setSpeed(speed);
@@ -211,6 +293,7 @@
 		UI.setBuild(sim);
 		UI.setPaused(false);
 		UI.setAnimate(false);
+		UI.setLineMode(sim, bench);
 	};
 
 	// the sliders read their own range off the constants, so the page cannot drift
@@ -265,6 +348,206 @@
 		smoothInput.value = String(seconds);
 		smoothValue.textContent = Math.round(seconds) + " S";
 	};
+
+	// ---- LINE mode: one line totalled, and the bench of N of them ----
+
+	// the readouts keep their places and change their meaning: the same footer row that
+	// carried a rate per second carries a total over the line, so nothing moves while the
+	// player compares two builds
+	UI.setLineMode = function (sim, bench) {
+		var on = sim.lineOn;
+
+		if (!lineInput) return;
+		lineInput.checked = on;
+		benchPanel.hidden = !on;
+		// the smoothing window is the rolling average's; a total has no window to choose
+		smoothInput.disabled = on;
+		smoothControl.classList.toggle("is-off", on);
+		setReadout(netLabel, netUnit, on ? "LINE NET" : "NET / S", on ? " CR" : " CR/S");
+		setReadout(profitLabel, profitUnit, on ? "LINE TRADE" : "PROFIT / S", on ? " CR" : " CR/S");
+		setReadout(capexLabel, capexUnit, on ? "LINE CAPEX" : "CAPEX / S", on ? " CR" : " CR/S");
+		setReadout(avgLabel, avgUnit, on ? "LINE TIME" : "AVG / S", on ? " SEC" : " CR/S");
+		setReadout(optimumLabel, optimumUnit, on ? "BENCH BEST" : "OPTIMUM / S", on ? " CR" : " CR/S");
+		optimumBuildLabel.textContent = on ? "BEST LINE W·G·D·E" : "OPTIMUM BUILD G·D·E";
+		displayedNetUnit = "";
+		UI.hidePlot();
+		UI.setBench(sim, bench);
+	};
+
+	function setReadout(label, unit, labelText, unitText) {
+		label.textContent = labelText;
+		unit.textContent = unitText;
+	}
+
+	// the bench's own controls: called when the mode, the length, the row count or the
+	// fixture moves, never per frame
+	UI.setBench = function (sim, bench) {
+		if (!benchPanel || !bench) return;
+		if (rowsBuilt !== bench.slots) buildRows(bench.slots);
+		lapsInput.value = String(bench.laps);
+		lapsValue.textContent = bench.meter.targetKm + " KM";
+		slotsInput.value = String(bench.slots);
+		slotsValue.textContent = String(bench.slots);
+		displayedBenchHead = "";
+		displayedBenchStatus = "";
+		displayedBenchBar = -1;
+		UI.updateBench(sim, bench);
+	};
+
+	function cell(parent, className) {
+		var el = document.createElement("span");
+
+		el.className = className;
+		parent.appendChild(el);
+		return el;
+	}
+
+	// the rows are elements built when the bench changes size and filled in place after
+	// that: a table read four times a second is not a table to rebuild every time
+	function buildRows(count) {
+		var i;
+		var el;
+
+		benchRows.textContent = "";
+		rows.length = 0;
+		rowsBuilt = count;
+		for (i = 0; i < count; i += 1) {
+			el = document.createElement(i === 0 ? "div" : "button");
+			el.className = "bench-row";
+			if (i > 0) {
+				el.type = "button";
+				el.dataset.slot = String(i);
+				el.addEventListener("click", onBenchRowClick);
+			}
+			rows.push({
+				el: el,
+				mark: cell(el, "bench-mark"),
+				build: cell(el, "bench-build"),
+				net: cell(el, "bench-net"),
+				time: cell(el, "bench-time"),
+				state: "",
+				titleShown: "",
+				markShown: "",
+				buildShown: "",
+				netShown: "",
+				timeShown: ""
+			});
+			benchRows.appendChild(el);
+		}
+	}
+
+	// what the row is made of: the build the player reads off the sliders, in their units
+	function buildText(bench, slot) {
+		var knobs = bench.knobs[slot];
+
+		return bench.wagons[slot] + "W " + RR.Tech.gaugeM(knobs[RR.Tech.GAUGE]).toFixed(2)
+			+ " " + RR.Tech.wheelM(knobs[RR.Tech.WHEEL]).toFixed(2)
+			+ " " + RR.Tech.mLocoOf(knobs[RR.Tech.ENGINE]).toFixed(0);
+	}
+
+	// pending rows show no number: the one they hold was measured on the build before the
+	// slider moved, and a stale total next to a new build is a lie
+	function rowState(bench, slot) {
+		if (!bench.used[slot]) return "is-empty";
+		if (bench.queued[slot]) return "is-pending";
+		if (bench.cut[slot]) return "is-cut";
+		if (slot === bench.best) return "is-best";
+		return slot === 0 ? "is-live" : "";
+	}
+
+	// what the row ran, behind it: a line is the fixed length plus whatever it took to
+	// finish clean, and that distance is the part of the total worth checking
+	function rowTitle(bench, slot) {
+		var run = bench.km[slot].toFixed(1) + " KM RUN · " + bench.stops[slot] + " STOPS · "
+			+ bench.units[slot] + " UNITS";
+
+		if (!bench.used[slot]) return "AN EMPTY ROW: + ROW PUTS THE LIVE BUILD HERE";
+		if (bench.queued[slot]) return slot === 0 ? "MEASURING THE BUILD YOU ARE RUNNING" : "MEASURING";
+		if (bench.cut[slot]) return "RAN TO THE CUTOFF WITHOUT LEAVING A STOP EMPTY · " + run;
+		return run + (slot === 0 ? "" : " · CLICK TO RUN THIS BUILD");
+	}
+
+	function updateRow(bench, slot) {
+		var row = rows[slot];
+		var pending = !bench.used[slot] || bench.queued[slot];
+		var state = rowState(bench, slot);
+		var title = rowTitle(bench, slot);
+		var mark = bench.used[slot] ? (slot === 0 ? "LIVE" : "#" + (slot + 1)) : "—";
+		var build = bench.used[slot] ? buildText(bench, slot) : "EMPTY";
+		var net = pending ? (bench.used[slot] ? "…" : "—") : signed(bench.net[slot]);
+		var time = pending ? (bench.used[slot] ? "…" : "—") : bench.seconds[slot].toFixed(1);
+
+		if (state !== row.state) {
+			row.el.className = "bench-row" + (state ? " " + state : "");
+			row.state = state;
+		}
+		if (title !== row.titleShown) {
+			row.el.title = title;
+			row.titleShown = title;
+		}
+		if (mark !== row.markShown) {
+			row.mark.textContent = mark;
+			row.markShown = mark;
+		}
+		if (build !== row.buildShown) {
+			row.build.textContent = build;
+			row.buildShown = build;
+		}
+		if (net !== row.netShown) {
+			row.net.textContent = net;
+			row.netShown = net;
+		}
+		if (time !== row.timeShown) {
+			row.time.textContent = time;
+			row.timeShown = time;
+		}
+	}
+
+	// the panel's head, rows and progress; four times a second while the mode is on
+	UI.updateBench = function (sim, bench) {
+		var head = bench.meter.targetKm + " KM · SEED " + bench.seed;
+		var used = RR.Line.rowsUsed(bench);
+		var status = "MEASURED " + bench.measured + "/" + used;
+		var bar = used > 0 ? Math.round(bench.measured * 100 / used) : 0;
+		var i;
+
+		if (!benchPanel || benchPanel.hidden) return;
+		if (head !== displayedBenchHead) {
+			benchLine.textContent = head;
+			displayedBenchHead = head;
+		}
+		for (i = 0; i < rows.length; i += 1) updateRow(bench, i);
+		if (status !== displayedBenchStatus) {
+			benchStatus.textContent = status;
+			displayedBenchStatus = status;
+		}
+		if (bar !== displayedBenchBar) {
+			benchBar.style.width = bar + "%";
+			displayedBenchBar = bar;
+		}
+	};
+
+	// the comparison the mode exists for: the live line against the best build the player
+	// put on the bench beside it
+	function benchGap(sim, bench) {
+		if (!bench || bench.bestCaptured < 0) return null;
+		return RR.Line.net(sim.line, sim.trains[0]) - bench.net[bench.bestCaptured];
+	}
+
+	function benchDeltaText(sim, bench) {
+		var gap = benchGap(sim, bench);
+
+		if (gap === null) return "NO OTHER LINE";
+		if (Math.abs(gap) < 0.005) return "LEVEL WITH BENCH";
+		return (gap > 0 ? "\u25B2 +" : "\u25BC ") + gap.toFixed(2) + " VS BENCH";
+	}
+
+	function benchDeltaClass(sim, bench) {
+		var gap = benchGap(sim, bench);
+
+		if (gap === null || Math.abs(gap) < 0.005) return "";
+		return gap > 0 ? "is-up" : "is-down";
+	}
 
 	UI.setPaused = function (paused) {
 		if (!pauseButton) return;
@@ -345,8 +628,9 @@
 		return "";
 	}
 
-	// signed rate, two decimals; "+" only on gains so a zero reads as "0.00"
-	function signedRate(value) {
+	// signed money, two decimals; "+" only on gains so a zero reads as "0.00". the same
+	// formatter reads a rate per second and a total over a line: both are credits
+	function signed(value) {
 		var rounded = Math.round(value * 100) / 100;
 
 		if (rounded > 0) return "+" + rounded.toFixed(2);
@@ -364,24 +648,44 @@
 			+ " · " + RR.Sweep.knobAt(cell[2], RR.Const.SWEEP_E_N).toFixed(2);
 	}
 
-	UI.updateTelemetry = function (fps, sim, clock, sweep, rate) {
+	// One write path, two meanings: in LINE mode the same rows carry the totals of the line
+	// the player is running and the best of the bench beside it, instead of the rolling
+	// rates and the swept grid. Nothing moves, so two builds can be read against each other
+	// without learning a second footer
+	UI.updateTelemetry = function (fps, sim, clock, sweep, rate, bench) {
 		var train = sim.trains[0];
+		var line = sim.line;
+		var onLine = sim.lineOn;
 		var nextFps = fps < 1 ? -1 : Math.round(fps);
 		var nextTime = Math.round(sim.time * 10) / 10;
 		var nextDropped = Math.round(clock.droppedSeconds * 100) / 100;
 		var nextTrainSpeed = Math.round(train.v * 100) / 100;
 		var nextCargo = String(train.cargoUnits) + "/" + String(RR.Train.capacity(train));
-		var nextNet = signedRate(sim.netRate);
-		var nextTrend = trendText(sim);
-		var nextClass = trendClass(sim);
-		var nextProfit = signedRate(sim.profitRate);
-		var nextCapex = signedRate(-sim.capexRate);
-		var nextAvg = signedRate(sim.netMean);
+		var nextNet = onLine ? signed(RR.Line.net(line, train)) : signed(sim.netRate);
+		var nextNetUnit = onLine ? lineUnit(line, train, bench) : " CR/S";
+		var nextTrend = onLine ? benchDeltaText(sim, bench) : trendText(sim);
+		var nextClass = onLine ? benchDeltaClass(sim, bench) : trendClass(sim);
+		var nextProfit = onLine ? signed(RR.Line.gross(line, train)) : signed(sim.profitRate);
+		var nextCapex = onLine ? signed(-RR.Line.capex(line, train)) : signed(-sim.capexRate);
+		var nextAvg = onLine ? RR.Line.seconds(line).toFixed(1) : signed(sim.netMean);
 		var nextRate = rate >= 100 ? String(Math.round(rate / 10) * 10) : String(Math.round(rate));
 		var measured = !!sweep && sweep.best >= 0;
-		var nextOptimum = measured ? signedRate(sweep.mean[sweep.best]) : "—";
-		var nextOptimumBuild = measured ? optimumBuildText(sweep) : "—";
+		var nextOptimum = "—";
+		var nextOptimumBuild = "—";
+		var benchUsed = onLine ? RR.Line.rowsUsed(bench) : 0;
 		boundSim = sim;
+
+		if (onLine) {
+			if (bench.bestCaptured >= 0) {
+				nextOptimum = signed(bench.net[bench.bestCaptured]);
+				nextOptimumBuild = buildText(bench, bench.bestCaptured);
+			} else if (bench.measured < benchUsed) {
+				nextOptimumBuild = "MEASURING " + bench.measured + "/" + benchUsed;
+			}
+		} else if (measured) {
+			nextOptimum = signed(sweep.mean[sweep.best]);
+			nextOptimumBuild = optimumBuildText(sweep);
+		}
 
 		if (nextFps !== displayedFps) {
 			fpsValue.textContent = nextFps < 0 ? "—" : String(nextFps);
@@ -410,6 +714,10 @@
 		if (nextNet !== displayedNet) {
 			netValue.textContent = nextNet;
 			displayedNet = nextNet;
+		}
+		if (nextNetUnit !== displayedNetUnit) {
+			netUnit.textContent = nextNetUnit;
+			displayedNetUnit = nextNetUnit;
 		}
 		if (nextClass !== displayedClass) {
 			netItem.classList.toggle("is-up", nextClass === "is-up");
@@ -445,9 +753,22 @@
 			displayedOptimumBuild = nextOptimumBuild;
 		}
 
-		RR.Render.drawGraph(graphContext, sim, graphW, graphH);
+		if (onLine) {
+			UI.updateBench(sim, bench);
+			RR.Render.drawBenchGraph(graphContext, bench, graphW, graphH);
+		} else {
+			RR.Render.drawGraph(graphContext, sim, graphW, graphH);
+		}
 		UI.drawPlot();
 	};
+
+	// the line's own progress rides beside its total: how much of the fixed length the train
+	// has covered, and how much it ran once it finished clean past the end of it
+	function lineUnit(line, train, bench) {
+		var target = bench ? bench.meter.targetKm : line.targetKm;
+
+		return " CR · " + Math.round(RR.Line.km(line, train)) + "/" + target + " KM";
+	}
 
 	function pixelRatio() {
 		return root.devicePixelRatio || 1;
